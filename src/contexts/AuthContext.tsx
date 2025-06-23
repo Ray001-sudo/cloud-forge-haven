@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -53,7 +52,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
 
       if (error) throw error;
-      setProfile(data);
+      // Ensure subscription_tier is properly typed
+      const profileData: Profile = {
+        ...data,
+        subscription_tier: data.subscription_tier as 'free' | 'pro' | 'elite' || 'free'
+      };
+      setProfile(profileData);
     } catch (error) {
       console.error('Error fetching profile:', error);
     }
