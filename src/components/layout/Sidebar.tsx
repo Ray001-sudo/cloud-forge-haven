@@ -24,12 +24,12 @@ interface SidebarProps {
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Projects', href: '/dashboard/projects', icon: Rocket },
+  { name: 'Monitoring', href: '/dashboard/monitoring', icon: Monitor },
+  { name: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook },
+  { name: 'Cron Jobs', href: '/dashboard/cron', icon: Clock },
   { name: 'Deployments', href: '/dashboard/deployments', icon: Globe },
   { name: 'Bots', href: '/dashboard/bots', icon: Bot },
   { name: 'File Manager', href: '/dashboard/files', icon: FolderOpen },
-  { name: 'Monitoring', href: '/dashboard/monitoring', icon: Monitor },
-  { name: 'Cron Jobs', href: '/dashboard/cron', icon: Clock },
-  { name: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook },
   { name: 'Logs', href: '/dashboard/logs', icon: FileText },
   { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
@@ -39,12 +39,19 @@ const Sidebar: React.FC<SidebarProps> = ({ className }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const isActiveRoute = (href: string) => {
+    if (href === '/dashboard') {
+      return location.pathname === '/dashboard';
+    }
+    return location.pathname.startsWith(href);
+  };
+
   return (
     <div className={cn('flex flex-col w-64 bg-slate-800 border-r border-slate-700', className)}>
       <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
         <nav className="mt-5 flex-1 px-2 space-y-1">
           {navigation.map((item) => {
-            const isActive = location.pathname === item.href;
+            const isActive = isActiveRoute(item.href);
             return (
               <Button
                 key={item.name}
