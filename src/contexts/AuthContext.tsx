@@ -6,12 +6,14 @@ import { toast } from 'sonner';
 
 interface Profile {
   id: string;
+  user_id: string;
   username: string;
   full_name?: string;
   avatar_url?: string;
-  plan_tier: 'free' | 'pro' | 'elite';
+  subscription_tier: 'free' | 'pro' | 'elite';
   credits: number;
-  referral_code: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface AuthContextType {
@@ -47,7 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('user_id', userId)
         .single();
 
       if (error) throw error;

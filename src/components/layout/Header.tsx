@@ -44,8 +44,8 @@ const Header = () => {
 
         <div className="flex items-center space-x-4">
           {profile && (
-            <Badge className={`${getPlanColor(profile.plan_tier)} text-white`}>
-              {profile.plan_tier.toUpperCase()}
+            <Badge className={`${getPlanColor(profile.subscription_tier)} text-white`}>
+              {profile.subscription_tier.toUpperCase()}
             </Badge>
           )}
 

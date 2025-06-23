@@ -59,7 +59,7 @@ const Dashboard = () => {
     elite: { projects: 50, ram: 4096, cpu: 100 }
   };
 
-  const currentLimits = planLimits[profile?.plan_tier as keyof typeof planLimits] || planLimits.free;
+  const currentLimits = planLimits[profile?.subscription_tier as keyof typeof planLimits] || planLimits.free;
 
   return (
     <DashboardLayout>
@@ -76,11 +76,11 @@ const Dashboard = () => {
           </div>
           <div className="flex items-center space-x-3">
             <Badge className={`${
-              profile?.plan_tier === 'pro' ? 'bg-sky-600' :
-              profile?.plan_tier === 'elite' ? 'bg-purple-600' :
+              profile?.subscription_tier === 'pro' ? 'bg-sky-600' :
+              profile?.subscription_tier === 'elite' ? 'bg-purple-600' :
               'bg-slate-600'
             } text-white`}>
-              {profile?.plan_tier?.toUpperCase()} PLAN
+              {profile?.subscription_tier?.toUpperCase()} PLAN
             </Badge>
             <Button className="bg-sky-600 hover:bg-sky-700">
               <Plus className="mr-2 h-4 w-4" />
