@@ -1,22 +1,26 @@
 
-import React, { useState, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { 
-  File, 
   Folder, 
-  FolderOpen, 
+  File, 
   Upload, 
   Download, 
-  Edit, 
+  Edit3, 
   Trash2, 
+  Save, 
+  X,
   Plus,
-  Save,
-  X
+  ChevronRight,
+  ChevronDown,
+  FileText,
+  Image,
+  Code,
+  Archive
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,11 +28,11 @@ interface FileItem {
   id: string;
   name: string;
   type: 'file' | 'folder';
-  size?: number;
-  lastModified: string;
-  content?: string;
   path: string;
-  parentId?: string;
+  size?: number;
+  lastModified?: string;
+  content?: string;
+  children?: FileItem[];
 }
 
 interface FileManagerProps {
@@ -37,165 +41,295 @@ interface FileManagerProps {
 }
 
 const FileManager: React.FC<FileManagerProps> = ({ projectId, projectName }) => {
-  const [files, setFiles] = useState<FileItem[]>([
-    {
-      id: '1',
-      name: 'app',
-      type: 'folder',
-      lastModified: '2024-01-15T10:30:00Z',
-      path: '/app',
-    },
-    {
-      id: '2',
-      name: 'main.py',
-      type: 'file',
-      size: 1024,
-      lastModified: '2024-01-15T10:30:00Z',
-      path: '/app/main.py',
-      parentId: '1',
-      content: `# Main application file
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
-
-@app.route('/')
-def hello():
-    return 'Hello, CloudForge!'
-
-@app.route('/api/status')
-def status():
-    return jsonify({'status': 'running', 'service': '${projectName}'})
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
-`
-    },
-    {
-      id: '3',
-      name: 'requirements.txt',
-      type: 'file',
-      size: 256,
-      lastModified: '2024-01-15T10:30:00Z',
-      path: '/app/requirements.txt',
-      parentId: '1',
-      content: `Flask==2.3.2
-gunicorn==21.2.0
-python-dotenv==1.0.0
-`
-    },
-    {
-      id: '4',
-      name: '.env',
-      type: 'file',
-      size: 128,
-      lastModified: '2024-01-15T10:30:00Z',
-      path: '/app/.env',
-      parentId: '1',
-      content: `PORT=5000
-DEBUG=true
-DATABASE_URL=postgresql://localhost:5432/cloudforge
-`
-    },
-    {
-      id: '5',
-      name: 'logs',
-      type: 'folder',
-      lastModified: '2024-01-15T10:30:00Z',
-      path: '/logs',
-    },
-    {
-      id: '6',
-      name: 'app.log',
-      type: 'file',
-      size: 2048,
-      lastModified: '2024-01-15T10:30:00Z',
-      path: '/logs/app.log',
-      parentId: '5',
-      content: `[2024-01-15 10:30:00] INFO: Application started
-[2024-01-15 10:30:01] INFO: Flask server running on port 5000
-[2024-01-15 10:30:02] INFO: Database connection established
-[2024-01-15 10:30:03] INFO: Routes registered successfully
-`
-    }
-  ]);
-
+  const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [editingFile, setEditingFile] = useState<FileItem | null>(null);
   const [editContent, setEditContent] = useState('');
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['1', '5']));
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [createType, setCreateType] = useState<'file' | 'folder'>('file');
-  const [createName, setCreateName] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['']));
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderPath, setNewFolderPath] = useState('');
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileClick = (file: FileItem) => {
-    if (file.type === 'folder') {
-      setExpandedFolders(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(file.id)) {
-          newSet.delete(file.id);
+  useEffect(() => {
+    loadFiles();
+  }, [projectId]);
+
+  const loadFiles = async () => {
+    try {
+      setIsLoading(true);
+      const { data: projectFiles, error } = await supabase
+        .from('project_files')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('file_path');
+
+      if (error) throw error;
+
+      // Convert flat file list to tree structure
+      const fileTree = buildFileTree(projectFiles || []);
+      setFiles(fileTree);
+    } catch (error) {
+      console.error('Error loading files:', error);
+      toast.error('Failed to load files');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const buildFileTree = (flatFiles: any[]): FileItem[] => {
+    const tree: FileItem[] = [];
+    const map = new Map<string, FileItem>();
+
+    // Add root folder
+    map.set('', { id: 'root', name: projectName, type: 'folder', path: '', children: [] });
+
+    // Process each file
+    flatFiles.forEach(file => {
+      const pathParts = file.file_path.split('/');
+      let currentPath = '';
+
+      // Create folder structure
+      pathParts.forEach((part, index) => {
+        const parentPath = currentPath;
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+
+        if (index === pathParts.length - 1) {
+          // This is the file
+          const fileItem: FileItem = {
+            id: file.id,
+            name: file.file_name,
+            type: 'file',
+            path: file.file_path,
+            size: file.file_size,
+            lastModified: file.updated_at
+          };
+
+          const parent = map.get(parentPath);
+          if (parent) {
+            parent.children = parent.children || [];
+            parent.children.push(fileItem);
+          }
+          map.set(currentPath, fileItem);
         } else {
-          newSet.add(file.id);
+          // This is a folder
+          if (!map.has(currentPath)) {
+            const folderItem: FileItem = {
+              id: `folder-${currentPath}`,
+              name: part,
+              type: 'folder',
+              path: currentPath,
+              children: []
+            };
+
+            const parent = map.get(parentPath);
+            if (parent) {
+              parent.children = parent.children || [];
+              parent.children.push(folderItem);
+            }
+            map.set(currentPath, folderItem);
+          }
         }
-        return newSet;
       });
-    } else {
-      setSelectedFile(file);
+    });
+
+    return map.get('')?.children || [];
+  };
+
+  const getFileIcon = (fileName: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'svg':
+        return <Image className="h-4 w-4 text-green-400" />;
+      case 'js':
+      case 'ts':
+      case 'jsx':
+      case 'tsx':
+      case 'py':
+      case 'html':
+      case 'css':
+      case 'json':
+        return <Code className="h-4 w-4 text-blue-400" />;
+      case 'zip':
+      case 'tar':
+      case 'gz':
+        return <Archive className="h-4 w-4 text-yellow-400" />;
+      default:
+        return <FileText className="h-4 w-4 text-slate-400" />;
     }
   };
 
-  const handleEditFile = (file: FileItem) => {
-    setEditingFile(file);
-    setEditContent(file.content || '');
+  const handleFileSelect = async (file: FileItem) => {
+    if (file.type === 'folder') {
+      toggleFolder(file.path);
+      return;
+    }
+
+    setSelectedFile(file);
+    
+    // Load file content if it's a text file
+    if (isTextFile(file.name)) {
+      try {
+        const { data, error } = await supabase.storage
+          .from('project-files')
+          .download(`${projectId}/${file.path}`);
+
+        if (error) throw error;
+        
+        const content = await data.text();
+        setSelectedFile({ ...file, content });
+      } catch (error) {
+        console.error('Error loading file content:', error);
+        toast.error('Failed to load file content');
+      }
+    }
   };
 
-  const handleSaveFile = () => {
-    if (editingFile) {
-      setFiles(prev => prev.map(f => 
-        f.id === editingFile.id 
-          ? { ...f, content: editContent, lastModified: new Date().toISOString() }
-          : f
-      ));
-      setEditingFile(null);
-      setEditContent('');
+  const isTextFile = (fileName: string) => {
+    const textExtensions = ['txt', 'js', 'ts', 'jsx', 'tsx', 'py', 'html', 'css', 'json', 'md', 'yml', 'yaml', 'xml'];
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    return textExtensions.includes(ext || '');
+  };
+
+  const toggleFolder = (path: string) => {
+    setExpandedFolders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(path)) {
+        newSet.delete(path);
+      } else {
+        newSet.add(path);
+      }
+      return newSet;
+    });
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const filePath = selectedFile?.type === 'folder' ? `${selectedFile.path}/${file.name}` : file.name;
+      
+      try {
+        // Upload to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from('project-files')
+          .upload(`${projectId}/${filePath}`, file);
+
+        if (uploadError) throw uploadError;
+
+        // Save file metadata to database
+        const { error: dbError } = await supabase
+          .from('project_files')
+          .insert({
+            project_id: projectId,
+            file_path: filePath,
+            file_name: file.name,
+            file_size: file.size,
+            mime_type: file.type,
+            storage_path: `${projectId}/${filePath}`
+          });
+
+        if (dbError) throw dbError;
+
+        toast.success(`Uploaded ${file.name}`);
+      } catch (error) {
+        console.error('Error uploading file:', error);
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+
+    // Reset input and reload files
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    loadFiles();
+  };
+
+  const handleFileEdit = () => {
+    if (!selectedFile) return;
+    setEditingFile(selectedFile);
+    setEditContent(selectedFile.content || '');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingFile) return;
+
+    try {
+      // Upload updated content to storage
+      const blob = new Blob([editContent], { type: 'text/plain' });
+      const { error } = await supabase.storage
+        .from('project-files')
+        .update(`${projectId}/${editingFile.path}`, blob);
+
+      if (error) throw error;
+
+      // Update file metadata
+      const { error: updateError } = await supabase
+        .from('project_files')
+        .update({ 
+          file_size: blob.size,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingFile.id);
+
+      if (updateError) throw updateError;
+
       toast.success('File saved successfully');
+      setEditingFile(null);
+      setSelectedFile({ ...editingFile, content: editContent });
+      loadFiles();
+    } catch (error) {
+      console.error('Error saving file:', error);
+      toast.error('Failed to save file');
     }
   };
 
-  const handleDeleteFile = (fileId: string) => {
-    setFiles(prev => prev.filter(f => f.id !== fileId && f.parentId !== fileId));
-    if (selectedFile?.id === fileId) {
+  const handleFileDelete = async (file: FileItem) => {
+    if (!confirm(`Are you sure you want to delete ${file.name}?`)) return;
+
+    try {
+      // Delete from storage
+      const { error: storageError } = await supabase.storage
+        .from('project-files')
+        .remove([`${projectId}/${file.path}`]);
+
+      if (storageError) throw storageError;
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('project_files')
+        .delete()
+        .eq('id', file.id);
+
+      if (dbError) throw dbError;
+
+      toast.success(`Deleted ${file.name}`);
       setSelectedFile(null);
-    }
-    toast.success('File deleted successfully');
-  };
-
-  const handleUploadFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const newFile: FileItem = {
-          id: Date.now().toString(),
-          name: file.name,
-          type: 'file',
-          size: file.size,
-          lastModified: new Date().toISOString(),
-          path: `/app/${file.name}`,
-          parentId: '1',
-          content: e.target?.result as string
-        };
-        setFiles(prev => [...prev, newFile]);
-        toast.success('File uploaded successfully');
-      };
-      reader.readAsText(file);
+      loadFiles();
+    } catch (error) {
+      console.error('Error deleting file:', error);
+      toast.error('Failed to delete file');
     }
   };
 
-  const handleDownloadFile = (file: FileItem) => {
-    if (file.content) {
-      const blob = new Blob([file.content], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
+  const handleFileDownload = async (file: FileItem) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('project-files')
+        .download(`${projectId}/${file.path}`);
+
+      if (error) throw error;
+
+      // Create download link
+      const url = URL.createObjectURL(data);
       const a = document.createElement('a');
       a.href = url;
       a.download = file.name;
@@ -203,240 +337,268 @@ DATABASE_URL=postgresql://localhost:5432/cloudforge
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success('File downloaded successfully');
+
+      toast.success(`Downloaded ${file.name}`);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      toast.error('Failed to download file');
     }
   };
 
-  const handleCreateItem = () => {
-    if (createName.trim()) {
-      const newItem: FileItem = {
-        id: Date.now().toString(),
-        name: createName,
-        type: createType,
-        lastModified: new Date().toISOString(),
-        path: `/app/${createName}`,
-        parentId: '1',
-        ...(createType === 'file' && { content: '', size: 0 })
-      };
-      setFiles(prev => [...prev, newItem]);
-      setCreateName('');
-      setIsCreateDialogOpen(false);
-      toast.success(`${createType === 'file' ? 'File' : 'Folder'} created successfully`);
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) return;
+
+    const folderPath = newFolderPath ? `${newFolderPath}/${newFolderName}` : newFolderName;
+
+    try {
+      // Create a placeholder file to represent the folder
+      const placeholderContent = new Blob([''], { type: 'text/plain' });
+      const { error: uploadError } = await supabase.storage
+        .from('project-files')
+        .upload(`${projectId}/${folderPath}/.gitkeep`, placeholderContent);
+
+      if (uploadError) throw uploadError;
+
+      // Save folder metadata
+      const { error: dbError } = await supabase
+        .from('project_files')
+        .insert({
+          project_id: projectId,
+          file_path: `${folderPath}/.gitkeep`,
+          file_name: '.gitkeep',
+          file_size: 0,
+          mime_type: 'text/plain',
+          storage_path: `${projectId}/${folderPath}/.gitkeep`
+        });
+
+      if (dbError) throw dbError;
+
+      toast.success(`Created folder ${newFolderName}`);
+      setNewFolderName('');
+      setShowNewFolder(false);
+      loadFiles();
+    } catch (error) {
+      console.error('Error creating folder:', error);
+      toast.error('Failed to create folder');
     }
   };
 
-  const formatFileSize = (bytes?: number) => {
-    if (!bytes) return '0 B';
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return `${Math.round(bytes / Math.pow(1024, i) * 100) / 100} ${sizes[i]}`;
-  };
-
-  const getFileIcon = (file: FileItem) => {
-    if (file.type === 'folder') {
-      return expandedFolders.has(file.id) ? FolderOpen : Folder;
-    }
-    return File;
-  };
-
-  const renderFileTree = (parentId?: string, level = 0) => {
-    return files
-      .filter(file => file.parentId === parentId)
-      .map(file => {
-        const Icon = getFileIcon(file);
-        const isExpanded = expandedFolders.has(file.id);
-        
-        return (
-          <div key={file.id}>
-            <div
-              className={`flex items-center p-2 rounded cursor-pointer hover:bg-slate-700 ${
-                selectedFile?.id === file.id ? 'bg-slate-600' : ''
-              }`}
-              style={{ paddingLeft: `${level * 20 + 8}px` }}
-              onClick={() => handleFileClick(file)}
-            >
-              <Icon className="h-4 w-4 mr-2 text-slate-400" />
-              <span className="text-sm text-white flex-1">{file.name}</span>
-              {file.type === 'file' && (
-                <span className="text-xs text-slate-400 ml-2">
-                  {formatFileSize(file.size)}
-                </span>
+  const renderFileTree = (items: FileItem[], level = 0) => {
+    return items.map(item => (
+      <div key={item.id} className="select-none">
+        <div
+          className={`flex items-center py-1 px-2 hover:bg-slate-700 cursor-pointer ${
+            selectedFile?.id === item.id ? 'bg-slate-700' : ''
+          }`}
+          style={{ paddingLeft: `${level * 20 + 8}px` }}
+          onClick={() => handleFileSelect(item)}
+        >
+          {item.type === 'folder' ? (
+            <>
+              {expandedFolders.has(item.path) ? (
+                <ChevronDown className="h-4 w-4 text-slate-400 mr-1" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-slate-400 mr-1" />
               )}
-            </div>
-            {file.type === 'folder' && isExpanded && renderFileTree(file.id, level + 1)}
-          </div>
-        );
-      });
+              <Folder className="h-4 w-4 text-blue-400 mr-2" />
+            </>
+          ) : (
+            <>
+              <div className="w-5" />
+              {getFileIcon(item.name)}
+              <span className="ml-2" />
+            </>
+          )}
+          <span className="text-slate-200 text-sm truncate">{item.name}</span>
+          {item.type === 'file' && item.size && (
+            <span className="text-slate-500 text-xs ml-auto">
+              {(item.size / 1024).toFixed(1)}KB
+            </span>
+          )}
+        </div>
+        
+        {item.type === 'folder' && expandedFolders.has(item.path) && item.children && (
+          renderFileTree(item.children, level + 1)
+        )}
+      </div>
+    ));
   };
+
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-slate-400">Loading files...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex">
       {/* File Tree Sidebar */}
-      <div className="w-1/3 bg-slate-800 border-r border-slate-700 overflow-y-auto">
+      <div className="w-1/3 border-r border-slate-700 overflow-y-auto">
         <div className="p-4 border-b border-slate-700">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Files</h3>
-            <div className="flex space-x-2">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleUploadFile}
-                className="hidden"
-              />
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-white font-semibold">Files</h3>
+            <div className="flex space-x-1">
               <Button
                 size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setNewFolderPath(selectedFile?.type === 'folder' ? selectedFile.path : '');
+                  setShowNewFolder(true);
+                }}
+                className="text-slate-400 hover:text-white"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
                 onClick={() => fileInputRef.current?.click()}
-                className="bg-sky-600 hover:bg-sky-700"
+                className="text-slate-400 hover:text-white"
               >
                 <Upload className="h-4 w-4" />
               </Button>
-              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" variant="outline" className="border-slate-600">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="bg-slate-800 border-slate-700">
-                  <DialogHeader>
-                    <DialogTitle className="text-white">Create New Item</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="flex space-x-4">
-                      <Button
-                        onClick={() => setCreateType('file')}
-                        variant={createType === 'file' ? 'default' : 'outline'}
-                        className={createType === 'file' ? 'bg-sky-600' : 'border-slate-600'}
-                      >
-                        File
-                      </Button>
-                      <Button
-                        onClick={() => setCreateType('folder')}
-                        variant={createType === 'folder' ? 'default' : 'outline'}
-                        className={createType === 'folder' ? 'bg-sky-600' : 'border-slate-600'}
-                      >
-                        Folder
-                      </Button>
-                    </div>
-                    <div>
-                      <Label htmlFor="name" className="text-white">Name</Label>
-                      <Input
-                        id="name"
-                        value={createName}
-                        onChange={(e) => setCreateName(e.target.value)}
-                        placeholder={`Enter ${createType} name`}
-                        className="bg-slate-700 border-slate-600 text-white"
-                      />
-                    </div>
-                    <div className="flex justify-end space-x-2">
-                      <Button
-                        onClick={() => setIsCreateDialogOpen(false)}
-                        variant="outline"
-                        className="border-slate-600"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        onClick={handleCreateItem}
-                        className="bg-sky-600 hover:bg-sky-700"
-                      >
-                        Create
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
             </div>
           </div>
+          
+          {showNewFolder && (
+            <div className="flex space-x-2 mb-2">
+              <Input
+                placeholder="Folder name"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
+                className="bg-slate-700 border-slate-600 text-white text-sm"
+              />
+              <Button size="sm" onClick={handleCreateFolder} className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="h-4 w-4" />
+              </Button>
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                onClick={() => setShowNewFolder(false)}
+                className="text-slate-400"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
+        
         <div className="p-2">
-          {renderFileTree()}
+          {renderFileTree(files)}
         </div>
       </div>
 
-      {/* File Content Area */}
+      {/* File Content/Editor */}
       <div className="flex-1 flex flex-col">
-        {editingFile ? (
-          <div className="h-full flex flex-col">
+        {selectedFile ? (
+          <>
             <div className="flex items-center justify-between p-4 border-b border-slate-700">
-              <h3 className="text-lg font-semibold text-white">Editing: {editingFile.name}</h3>
+              <div className="flex items-center space-x-2">
+                {getFileIcon(selectedFile.name)}
+                <h3 className="text-white font-medium">{selectedFile.name}</h3>
+                {selectedFile.lastModified && (
+                  <span className="text-slate-500 text-sm">
+                    Modified: {new Date(selectedFile.lastModified).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              
               <div className="flex space-x-2">
+                {selectedFile.type === 'file' && isTextFile(selectedFile.name) && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleFileEdit}
+                    className="text-slate-400 hover:text-white"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button
-                  onClick={handleSaveFile}
-                  className="bg-green-600 hover:bg-green-700"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleFileDownload(selectedFile)}
+                  className="text-slate-400 hover:text-white"
                 >
-                  <Save className="h-4 w-4 mr-2" />
-                  Save
+                  <Download className="h-4 w-4" />
                 </Button>
                 <Button
-                  onClick={() => setEditingFile(null)}
-                  variant="outline"
-                  className="border-slate-600"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => handleFileDelete(selectedFile)}
+                  className="text-red-400 hover:text-red-300"
                 >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            <div className="flex-1 p-4">
-              <Textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="w-full h-full bg-slate-900 border-slate-600 text-white font-mono text-sm resize-none"
-                placeholder="Enter file content..."
-              />
-            </div>
-          </div>
-        ) : selectedFile ? (
-          <div className="h-full flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-slate-700">
-              <div>
-                <h3 className="text-lg font-semibold text-white">{selectedFile.name}</h3>
-                <p className="text-sm text-slate-400">
-                  {formatFileSize(selectedFile.size)} • Modified {new Date(selectedFile.lastModified).toLocaleString()}
-                </p>
-              </div>
-              <div className="flex space-x-2">
-                <Button
-                  onClick={() => handleEditFile(selectedFile)}
-                  variant="outline"
-                  className="border-slate-600"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-                <Button
-                  onClick={() => handleDownloadFile(selectedFile)}
-                  variant="outline"
-                  className="border-slate-600"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
-                </Button>
-                <Button
-                  onClick={() => handleDeleteFile(selectedFile.id)}
-                  variant="outline"
-                  className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             </div>
-            <div className="flex-1 p-4 overflow-y-auto">
-              <pre className="bg-slate-900 rounded-lg p-4 text-white font-mono text-sm overflow-x-auto">
-                {selectedFile.content || 'No content available'}
-              </pre>
+
+            <div className="flex-1 p-4 overflow-auto">
+              {editingFile ? (
+                <div className="h-full flex flex-col">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-white font-medium">Editing {editingFile.name}</h4>
+                    <div className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        onClick={handleSaveEdit}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditingFile(null)}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <Textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="flex-1 bg-slate-900 border-slate-700 text-slate-200 font-mono text-sm resize-none"
+                    placeholder="File content..."
+                  />
+                </div>
+              ) : selectedFile.content !== undefined ? (
+                <pre className="text-slate-200 font-mono text-sm whitespace-pre-wrap">
+                  {selectedFile.content}
+                </pre>
+              ) : (
+                <div className="text-slate-400 text-center py-8">
+                  <File className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Cannot preview this file type</p>
+                  <p className="text-sm">Use the download button to view the file</p>
+                </div>
+              )}
             </div>
-          </div>
+          </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <File className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-white mb-2">No file selected</h3>
-              <p className="text-slate-400">Click on a file to view its contents</p>
+            <div className="text-center text-slate-400">
+              <Folder className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Select a file to view its contents</p>
+              <p className="text-sm mt-2">Upload files by clicking the upload button</p>
             </div>
           </div>
         )}
       </div>
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileUpload}
+      />
     </div>
   );
 };
