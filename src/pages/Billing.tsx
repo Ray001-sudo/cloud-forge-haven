@@ -111,7 +111,8 @@ const Billing = () => {
   const loadBillingData = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      // Use type casting to access the billing_history table
+      const { data, error } = await (supabase as any)
         .from('billing_history')
         .select('*')
         .eq('user_id', user?.id)
@@ -152,7 +153,7 @@ const Billing = () => {
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Create billing record
-      const { error: billingError } = await supabase
+      const { error: billingError } = await (supabase as any)
         .from('billing_history')
         .insert({
           user_id: user?.id,
