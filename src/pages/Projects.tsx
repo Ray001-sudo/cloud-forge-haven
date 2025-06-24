@@ -30,13 +30,19 @@ interface Project {
   id: string;
   name: string;
   description: string | null;
-  project_type: string;
+  app_type: string;
   runtime: string;
-  status: string;
+  container_status: string;
   repository_url: string | null;
-  deployment_url: string | null;
+  custom_domain: string | null;
   created_at: string;
   last_deployed_at: string | null;
+  user_id: string;
+  branch: string | null;
+  build_command: string | null;
+  start_command: string | null;
+  environment_variables: any;
+  updated_at: string | null;
 }
 
 const Projects = () => {
@@ -51,7 +57,7 @@ const Projects = () => {
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
-    project_type: 'web',
+    app_type: 'web',
     runtime: 'nodejs',
     repository_url: ''
   });
@@ -105,18 +111,18 @@ const Projects = () => {
           user_id: user?.id,
           name: newProject.name.trim(),
           description: newProject.description.trim() || null,
-          project_type: newProject.project_type,
+          app_type: newProject.app_type,
           runtime: newProject.runtime,
           repository_url: newProject.repository_url.trim() || null,
-          status: 'stopped'
+          container_status: 'stopped'
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      // Create initial log entry
-      await supabase
+      // Create initial log entry using type casting
+      await (supabase as any)
         .from('project_logs')
         .insert({
           project_id: data.id,
@@ -130,7 +136,7 @@ const Projects = () => {
       setNewProject({
         name: '',
         description: '',
-        project_type: 'web',
+        app_type: 'web',
         runtime: 'nodejs',
         repository_url: ''
       });
@@ -150,15 +156,15 @@ const Projects = () => {
       const { error } = await supabase
         .from('projects')
         .update({ 
-          status: newStatus,
+          container_status: newStatus,
           last_deployed_at: action !== 'stop' ? new Date().toISOString() : undefined
         })
         .eq('id', projectId);
 
       if (error) throw error;
 
-      // Log the action
-      await supabase
+      // Log the action using type casting
+      await (supabase as any)
         .from('project_logs')
         .insert({
           project_id: projectId,
@@ -276,8 +282,8 @@ const Projects = () => {
                   <div className="space-y-2">
                     <Label className="text-white">Project Type</Label>
                     <Select 
-                      value={newProject.project_type} 
-                      onValueChange={(value) => setNewProject(prev => ({ ...prev, project_type: value }))}
+                      value={newProject.app_type} 
+                      onValueChange={(value) => setNewProject(prev => ({ ...prev, app_type: value }))}
                     >
                       <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
                         <SelectValue />
@@ -380,8 +386,8 @@ const Projects = () => {
                       <span className="text-lg">{getRuntimeIcon(project.runtime)}</span>
                       <CardTitle className="text-white text-lg">{project.name}</CardTitle>
                     </div>
-                    <Badge className={`${getStatusColor(project.status)} text-white`}>
-                      {project.status}
+                    <Badge className={`${getStatusColor(project.container_status)} text-white`}>
+                      {project.container_status}
                     </Badge>
                   </div>
                   {project.description && (
@@ -392,7 +398,7 @@ const Projects = () => {
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-400">Type:</span>
-                    <span className="text-white capitalize">{project.project_type}</span>
+                    <span className="text-white capitalize">{project.app_type}</span>
                   </div>
                   
                   <div className="flex items-center justify-between text-sm">
@@ -417,7 +423,7 @@ const Projects = () => {
                   )}
 
                   <div className="flex items-center space-x-2 pt-2">
-                    {project.status === 'stopped' ? (
+                    {project.container_status === 'stopped' ? (
                       <Button
                         size="sm"
                         onClick={() => handleProjectAction(project.id, 'start')}
@@ -459,11 +465,11 @@ const Projects = () => {
                       </Button>
                     )}
                     
-                    {project.deployment_url && (
+                    {project.custom_domain && (
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => window.open(project.deployment_url!, '_blank')}
+                        onClick={() => window.open(`https://${project.custom_domain}`, '_blank')}
                         className="text-slate-400 hover:text-white p-2"
                       >
                         <ExternalLink className="h-4 w-4" />
