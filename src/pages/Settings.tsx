@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -69,7 +68,16 @@ const Settings = () => {
         .single();
 
       if (error) throw error;
-      setProject(data);
+      
+      // Convert the data to match our Project interface
+      const projectData: Project = {
+        ...data,
+        environment_variables: typeof data.environment_variables === 'object' && data.environment_variables !== null 
+          ? data.environment_variables as Record<string, string>
+          : {}
+      };
+      
+      setProject(projectData);
     } catch (error) {
       console.error('Error loading project:', error);
       toast.error('Failed to load project settings');
