@@ -1,5 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,7 +20,8 @@ import {
   Edit,
   CheckCircle,
   XCircle,
-  Calendar
+  Calendar,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -27,55 +30,37 @@ interface CronJob {
   name: string;
   schedule: string;
   command: string;
-  projectId: string;
-  projectName: string;
+  project_id: string;
   status: 'active' | 'paused' | 'error';
-  lastRun?: string;
-  nextRun: string;
-  lastOutput?: string;
-  successCount: number;
-  errorCount: number;
+  last_run?: string;
+  next_run: string;
+  last_output?: string;
+  success_count: number;
+  error_count: number;
+  created_at: string;
+  projects?: {
+    name: string;
+  };
+}
+
+interface Project {
+  id: string;
+  name: string;
 }
 
 const CronJobs = () => {
-  const [jobs, setJobs] = useState<CronJob[]>([
-    {
-      id: '1',
-      name: 'Daily Backup',
-      schedule: '0 2 * * *',
-      command: 'python backup.py',
-      projectId: 'proj1',
-      projectName: 'my-web-app',
-      status: 'active',
-      lastRun: '2024-01-15T02:00:00Z',
-      nextRun: '2024-01-16T02:00:00Z',
-      lastOutput: 'Backup completed successfully',
-      successCount: 15,
-      errorCount: 0
-    },
-    {
-      id: '2',
-      name: 'Send Reports',
-      schedule: '0 9 * * 1',
-      command: 'node send-reports.js',
-      projectId: 'proj2',
-      projectName: 'telegram-bot',
-      status: 'active',
-      lastRun: '2024-01-08T09:00:00Z',
-      nextRun: '2024-01-15T09:00:00Z',
-      lastOutput: 'Reports sent to 50 users',
-      successCount: 8,
-      errorCount: 1
-    }
-  ]);
-
+  const { user } = useAuth();
+  const [jobs, setJobs] = useState<CronJob[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [editingJob, setEditingJob] = useState<CronJob | null>(null);
   const [newJob, setNewJob] = useState({
     name: '',
     schedule: '',
     command: '',
-    projectId: '',
+    project_id: '',
     quickSchedule: ''
   });
 
@@ -89,65 +74,150 @@ const CronJobs = () => {
     { label: 'Monthly (1st at midnight)', value: '0 0 1 * *' }
   ];
 
-  const projects = [
-    { id: 'proj1', name: 'my-web-app' },
-    { id: 'proj2', name: 'telegram-bot' },
-    { id: 'proj3', name: 'api-service' }
-  ];
+  useEffect(() => {
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
-  const handleCreateJob = () => {
-    if (!newJob.name || !newJob.schedule || !newJob.command || !newJob.projectId) {
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      await Promise.all([loadCronJobs(), loadProjects()]);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast.error('Failed to load cron jobs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadCronJobs = async () => {
+    const { data, error } = await supabase
+      .from('cron_jobs')
+      .select(`
+        *,
+        projects (
+          name
+        )
+      `)
+      .in('project_id', 
+        await supabase
+          .from('projects')
+          .select('id')
+          .eq('user_id', user?.id)
+          .then(({ data }) => data?.map(p => p.id) || [])
+      )
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    setJobs(data || []);
+  };
+
+  const loadProjects = async () => {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('id, name')
+      .eq('user_id', user?.id)
+      .order('name');
+
+    if (error) throw error;
+    setProjects(data || []);
+  };
+
+  const handleCreateJob = async () => {
+    if (!newJob.name || !newJob.schedule || !newJob.command || !newJob.project_id) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    const job: CronJob = {
-      id: Date.now().toString(),
-      name: newJob.name,
-      schedule: newJob.schedule,
-      command: newJob.command,
-      projectId: newJob.projectId,
-      projectName: projects.find(p => p.id === newJob.projectId)?.name || '',
-      status: 'active',
-      nextRun: new Date(Date.now() + 3600000).toISOString(), // Next hour
-      successCount: 0,
-      errorCount: 0
-    };
+    try {
+      setCreating(true);
+      
+      const { error } = await supabase
+        .from('cron_jobs')
+        .insert({
+          name: newJob.name,
+          schedule: newJob.schedule,
+          command: newJob.command,
+          project_id: newJob.project_id,
+          status: 'active'
+        });
 
-    setJobs([...jobs, job]);
-    setNewJob({ name: '', schedule: '', command: '', projectId: '', quickSchedule: '' });
-    setIsCreateDialogOpen(false);
-    toast.success('Cron job created successfully');
+      if (error) throw error;
+
+      toast.success('Cron job created successfully');
+      setNewJob({ name: '', schedule: '', command: '', project_id: '', quickSchedule: '' });
+      setIsCreateDialogOpen(false);
+      loadCronJobs();
+    } catch (error) {
+      console.error('Error creating cron job:', error);
+      toast.error('Failed to create cron job');
+    } finally {
+      setCreating(false);
+    }
   };
 
-  const toggleJobStatus = (jobId: string) => {
-    setJobs(prev => prev.map(job => 
-      job.id === jobId 
-        ? { ...job, status: job.status === 'active' ? 'paused' : 'active' }
-        : job
-    ));
-    toast.success('Job status updated');
+  const toggleJobStatus = async (jobId: string, currentStatus: string) => {
+    try {
+      const newStatus = currentStatus === 'active' ? 'paused' : 'active';
+      
+      const { error } = await supabase
+        .from('cron_jobs')
+        .update({ status: newStatus })
+        .eq('id', jobId);
+
+      if (error) throw error;
+
+      toast.success(`Job ${newStatus === 'active' ? 'resumed' : 'paused'} successfully`);
+      loadCronJobs();
+    } catch (error) {
+      console.error('Error updating job status:', error);
+      toast.error('Failed to update job status');
+    }
   };
 
-  const deleteJob = (jobId: string) => {
-    setJobs(prev => prev.filter(job => job.id !== jobId));
-    toast.success('Cron job deleted');
+  const deleteJob = async (jobId: string) => {
+    if (!confirm('Are you sure you want to delete this cron job?')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('cron_jobs')
+        .delete()
+        .eq('id', jobId);
+
+      if (error) throw error;
+
+      toast.success('Cron job deleted successfully');
+      loadCronJobs();
+    } catch (error) {
+      console.error('Error deleting cron job:', error);
+      toast.error('Failed to delete cron job');
+    }
   };
 
-  const runJobNow = (jobId: string) => {
-    const job = jobs.find(j => j.id === jobId);
-    if (job) {
-      setJobs(prev => prev.map(j => 
-        j.id === jobId 
-          ? { 
-              ...j, 
-              lastRun: new Date().toISOString(),
-              lastOutput: 'Manual execution completed',
-              successCount: j.successCount + 1
-            }
-          : j
-      ));
-      toast.success(`Executed: ${job.name}`);
+  const runJobNow = async (jobId: string) => {
+    try {
+      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/cron-executor`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabase.supabaseKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ jobId })
+      });
+
+      if (response.ok) {
+        toast.success('Job executed manually');
+        loadCronJobs();
+      } else {
+        throw new Error('Failed to execute job');
+      }
+    } catch (error) {
+      console.error('Error running job:', error);
+      toast.error('Failed to execute job');
     }
   };
 
@@ -169,13 +239,23 @@ const CronJobs = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-sky-400" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white">Cron Jobs</h1>
-            <p className="text-slate-400 mt-1">Schedule and manage automated tasks</p>
+            <p className="text-slate-400 mt-1">Schedule and manage automated tasks ({jobs.length} jobs)</p>
           </div>
           
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -207,7 +287,7 @@ const CronJobs = () => {
                   </div>
                   <div>
                     <Label htmlFor="project">Project *</Label>
-                    <Select value={newJob.projectId} onValueChange={(value) => setNewJob({...newJob, projectId: value})}>
+                    <Select value={newJob.project_id} onValueChange={(value) => setNewJob({...newJob, project_id: value})}>
                       <SelectTrigger className="bg-slate-700 border-slate-600">
                         <SelectValue placeholder="Select project" />
                       </SelectTrigger>
@@ -271,9 +351,18 @@ const CronJobs = () => {
                   <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} className="border-slate-600">
                     Cancel
                   </Button>
-                  <Button onClick={handleCreateJob} className="bg-sky-600 hover:bg-sky-700">
-                    <Clock className="mr-2 h-4 w-4" />
-                    Create Job
+                  <Button onClick={handleCreateJob} disabled={creating} className="bg-sky-600 hover:bg-sky-700">
+                    {creating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="mr-2 h-4 w-4" />
+                        Create Job
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -306,7 +395,7 @@ const CronJobs = () => {
                           <span className="ml-2">{job.name}</span>
                         </CardTitle>
                         <p className="text-slate-400 text-sm">
-                          {job.projectName} • {job.schedule}
+                          {job.projects?.name} • {job.schedule}
                         </p>
                       </div>
                     </div>
@@ -328,29 +417,29 @@ const CronJobs = () => {
                     <div>
                       <p className="text-slate-400 text-sm">Last Run</p>
                       <p className="text-white text-sm">
-                        {job.lastRun ? new Date(job.lastRun).toLocaleString() : 'Never'}
+                        {job.last_run ? new Date(job.last_run).toLocaleString() : 'Never'}
                       </p>
                     </div>
                     <div>
                       <p className="text-slate-400 text-sm">Next Run</p>
                       <p className="text-white text-sm flex items-center">
                         <Calendar className="h-3 w-3 mr-1" />
-                        {new Date(job.nextRun).toLocaleString()}
+                        {new Date(job.next_run).toLocaleString()}
                       </p>
                     </div>
                     <div>
                       <p className="text-slate-400 text-sm">Success Rate</p>
                       <p className="text-white text-sm">
-                        {job.successCount} / {job.successCount + job.errorCount} runs
+                        {job.success_count} / {job.success_count + job.error_count} runs
                       </p>
                     </div>
                   </div>
 
-                  {job.lastOutput && (
+                  {job.last_output && (
                     <div className="mb-4">
                       <p className="text-slate-400 text-sm mb-1">Last Output</p>
                       <div className="bg-slate-900 rounded px-3 py-2 text-sm text-slate-300 font-mono">
-                        {job.lastOutput}
+                        {job.last_output}
                       </div>
                     </div>
                   )}
@@ -367,7 +456,7 @@ const CronJobs = () => {
                       </Button>
                       <Button
                         size="sm"
-                        onClick={() => toggleJobStatus(job.id)}
+                        onClick={() => toggleJobStatus(job.id, job.status)}
                         variant="outline"
                         className="border-slate-600"
                       >

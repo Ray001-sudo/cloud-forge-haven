@@ -1,125 +1,195 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { 
   Activity, 
-  Server, 
-  Database, 
-  Globe, 
-  Clock,
-  TrendingUp,
+  Cpu, 
+  HardDrive, 
+  Network, 
+  TrendingUp, 
   AlertTriangle,
-  CheckCircle,
-  Zap
+  Server,
+  Clock
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { toast } from 'sonner';
+
+interface Project {
+  id: string;
+  name: string;
+  container_status: string;
+  subdomain: string;
+}
+
+interface ResourceUsage {
+  id: string;
+  cpu_usage: number;
+  memory_usage: number;
+  disk_usage: number;
+  network_in: number;
+  network_out: number;
+  recorded_at: string;
+}
 
 const Monitoring = () => {
-  const [selectedProject, setSelectedProject] = useState('all');
-  const [timeRange, setTimeRange] = useState('24h');
+  const { user } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string>('');
+  const [resourceData, setResourceData] = useState<ResourceUsage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentStats, setCurrentStats] = useState({
+    cpu: 0,
+    memory: 0,
+    disk: 0,
+    network: 0
+  });
 
-  // Mock data for charts
-  const cpuData = [
-    { time: '00:00', value: 12 },
-    { time: '04:00', value: 8 },
-    { time: '08:00', value: 25 },
-    { time: '12:00', value: 45 },
-    { time: '16:00', value: 35 },
-    { time: '20:00', value: 20 },
-    { time: '24:00', value: 15 }
-  ];
-
-  const memoryData = [
-    { time: '00:00', used: 180, total: 512 },
-    { time: '04:00', used: 150, total: 512 },
-    { time: '08:00', used: 220, total: 512 },
-    { time: '12:00', used: 380, total: 512 },
-    { time: '16:00', used: 340, total: 512 },
-    { time: '20:00', used: 280, total: 512 },
-    { time: '24:00', used: 200, total: 512 }
-  ];
-
-  const requestsData = [
-    { time: '00:00', requests: 120 },
-    { time: '04:00', requests: 80 },
-    { time: '08:00', requests: 300 },
-    { time: '12:00', requests: 450 },
-    { time: '16:00', requests: 380 },
-    { time: '20:00', requests: 250 },
-    { time: '24:00', requests: 180 }
-  ];
-
-  const responseTimeData = [
-    { time: '00:00', p50: 120, p95: 280, p99: 450 },
-    { time: '04:00', p50: 110, p95: 250, p99: 400 },
-    { time: '08:00', p50: 140, p95: 320, p99: 500 },
-    { time: '12:00', p50: 180, p95: 380, p99: 600 },
-    { time: '16:00', p50: 160, p95: 350, p99: 550 },
-    { time: '20:00', p50: 130, p95: 300, p99: 480 },
-    { time: '24:00', p50: 125, p95: 290, p99: 460 }
-  ];
-
-  const statusCodesData = [
-    { name: '2xx', value: 85, color: '#22c55e' },
-    { name: '4xx', value: 12, color: '#f59e0b' },
-    { name: '5xx', value: 3, color: '#ef4444' }
-  ];
-
-  const projects = [
-    { id: 'all', name: 'All Projects' },
-    { id: 'proj1', name: 'my-web-app' },
-    { id: 'proj2', name: 'telegram-bot' },
-    { id: 'proj3', name: 'api-service' }
-  ];
-
-  const alerts = [
-    {
-      id: '1',
-      type: 'warning',
-      title: 'High Memory Usage',
-      description: 'my-web-app is using 85% of allocated memory',
-      timestamp: '5 minutes ago',
-      project: 'my-web-app'
-    },
-    {
-      id: '2',
-      type: 'error',
-      title: 'Service Down',
-      description: 'telegram-bot has been unreachable for 2 minutes',
-      timestamp: '2 minutes ago',
-      project: 'telegram-bot'
-    },
-    {
-      id: '3',
-      type: 'success',
-      title: 'Deployment Complete',
-      description: 'api-service v1.2.0 deployed successfully',
-      timestamp: '10 minutes ago',
-      project: 'api-service'
+  useEffect(() => {
+    if (user) {
+      loadProjects();
     }
-  ];
+  }, [user]);
 
-  const getAlertIcon = (type: string) => {
-    switch (type) {
-      case 'error': return <AlertTriangle className="h-4 w-4 text-red-400" />;
-      case 'warning': return <AlertTriangle className="h-4 w-4 text-yellow-400" />;
-      case 'success': return <CheckCircle className="h-4 w-4 text-green-400" />;
-      default: return <Activity className="h-4 w-4 text-blue-400" />;
+  useEffect(() => {
+    if (selectedProject) {
+      loadResourceData();
+      const interval = setInterval(loadResourceData, 30000); // Update every 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [selectedProject]);
+
+  const loadProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, container_status, subdomain')
+        .eq('user_id', user?.id)
+        .order('name');
+
+      if (error) throw error;
+      
+      setProjects(data || []);
+      if (data && data.length > 0 && !selectedProject) {
+        setSelectedProject(data[0].id);
+      }
+    } catch (error) {
+      console.error('Error loading projects:', error);
+      toast.error('Failed to load projects');
     }
   };
 
-  const getAlertColor = (type: string) => {
-    switch (type) {
-      case 'error': return 'border-red-600 bg-red-900/20';
-      case 'warning': return 'border-yellow-600 bg-yellow-900/20';
-      case 'success': return 'border-green-600 bg-green-900/20';
-      default: return 'border-blue-600 bg-blue-900/20';
+  const loadResourceData = async () => {
+    if (!selectedProject) return;
+
+    try {
+      setLoading(true);
+
+      // Get resource usage data for the last 24 hours
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      
+      const { data, error } = await supabase
+        .from('resource_usage')
+        .select('*')
+        .eq('project_id', selectedProject)
+        .gte('recorded_at', twentyFourHoursAgo)
+        .order('recorded_at', { ascending: true });
+
+      if (error) throw error;
+
+      setResourceData(data || []);
+      
+      // Set current stats from latest data
+      if (data && data.length > 0) {
+        const latest = data[data.length - 1];
+        setCurrentStats({
+          cpu: latest.cpu_usage,
+          memory: latest.memory_usage,
+          disk: latest.disk_usage,
+          network: (latest.network_in + latest.network_out) / 2
+        });
+      }
+
+      // If no data exists, fetch current stats from container
+      if (!data || data.length === 0) {
+        await fetchCurrentStats();
+      }
+
+    } catch (error) {
+      console.error('Error loading resource data:', error);
+      toast.error('Failed to load monitoring data');
+    } finally {
+      setLoading(false);
     }
   };
+
+  const fetchCurrentStats = async () => {
+    try {
+      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/container-manager`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabase.supabaseKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'stats',
+          projectId: selectedProject
+        })
+      });
+
+      if (response.ok) {
+        const stats = await response.json();
+        setCurrentStats({
+          cpu: stats.cpu_usage || 0,
+          memory: stats.memory_usage || 0,
+          disk: stats.disk_usage || 0,
+          network: (stats.network_in + stats.network_out) / 2 || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching current stats:', error);
+    }
+  };
+
+  const selectedProjectData = projects.find(p => p.id === selectedProject);
+
+  const formatChartData = (data: ResourceUsage[]) => {
+    return data.map(item => ({
+      time: new Date(item.recorded_at).toLocaleTimeString(),
+      cpu: parseFloat(item.cpu_usage.toString()),
+      memory: item.memory_usage,
+      disk: item.disk_usage,
+      networkIn: item.network_in,
+      networkOut: item.network_out
+    }));
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'running': return 'bg-green-600';
+      case 'stopped': return 'bg-gray-600';
+      case 'error': return 'bg-red-600';
+      default: return 'bg-gray-600';
+    }
+  };
+
+  if (projects.length === 0 && !loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <Server className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-white mb-2">No Projects Found</h3>
+            <p className="text-slate-400">Create a project to start monitoring resources</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -127,291 +197,185 @@ const Monitoring = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-white">Monitoring</h1>
-            <p className="text-slate-400 mt-1">Real-time performance metrics and alerts</p>
+            <p className="text-slate-400 mt-1">Real-time resource usage and performance metrics</p>
           </div>
-          <div className="flex space-x-3">
+          
+          <div className="flex items-center space-x-4">
             <Select value={selectedProject} onValueChange={setSelectedProject}>
-              <SelectTrigger className="w-48 bg-slate-700 border-slate-600">
-                <SelectValue />
+              <SelectTrigger className="w-64 bg-slate-800 border-slate-700 text-white">
+                <SelectValue placeholder="Select project" />
               </SelectTrigger>
-              <SelectContent className="bg-slate-700 border-slate-600">
+              <SelectContent className="bg-slate-800 border-slate-700">
                 {projects.map(project => (
                   <SelectItem key={project.id} value={project.id}>
-                    {project.name}
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-2 h-2 rounded-full ${getStatusColor(project.container_status)}`} />
+                      <span>{project.name}</span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select value={timeRange} onValueChange={setTimeRange}>
-              <SelectTrigger className="w-32 bg-slate-700 border-slate-600">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-700 border-slate-600">
-                <SelectItem value="1h">Last Hour</SelectItem>
-                <SelectItem value="24h">Last 24h</SelectItem>
-                <SelectItem value="7d">Last 7 days</SelectItem>
-                <SelectItem value="30d">Last 30 days</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
 
+        {selectedProjectData && (
+          <div className="flex items-center justify-between p-4 bg-slate-800 rounded-lg border border-slate-700">
+            <div className="flex items-center space-x-4">
+              <div>
+                <h2 className="text-xl font-semibold text-white">{selectedProjectData.name}</h2>
+                <p className="text-slate-400">https://{selectedProjectData.subdomain}.cloudforge.dev</p>
+              </div>
+            </div>
+            <Badge className={`${getStatusColor(selectedProjectData.container_status)} text-white`}>
+              {selectedProjectData.container_status}
+            </Badge>
+          </div>
+        )}
+
+        {/* Current Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader className="pb-3">
-              <CardTitle className="text-white flex items-center">
-                <Activity className="h-5 w-5 mr-2 text-green-400" />
+              <CardTitle className="text-white flex items-center text-sm font-medium">
+                <Cpu className="h-4 w-4 mr-2 text-blue-400" />
                 CPU Usage
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-white">23.5%</div>
-              <p className="text-sm text-slate-400">Average across all projects</p>
-              <div className="flex items-center mt-2">
-                <TrendingUp className="h-4 w-4 text-green-400 mr-1" />
-                <span className="text-green-400 text-sm">+2.1% from yesterday</span>
-              </div>
+              <div className="text-2xl font-bold text-white">{currentStats.cpu.toFixed(1)}%</div>
+              <p className="text-xs text-slate-400">Current load</p>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader className="pb-3">
-              <CardTitle className="text-white flex items-center">
-                <Server className="h-5 w-5 mr-2 text-blue-400" />
-                Memory Usage
+              <CardTitle className="text-white flex items-center text-sm font-medium">
+                <Activity className="h-4 w-4 mr-2 text-green-400" />
+                Memory
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-white">1.2GB</div>
-              <p className="text-sm text-slate-400">of 4GB allocated</p>
-              <div className="w-full bg-slate-700 rounded-full h-2 mt-2">
-                <div className="bg-blue-400 h-2 rounded-full" style={{ width: '30%' }}></div>
-              </div>
+              <div className="text-2xl font-bold text-white">{currentStats.memory} MB</div>
+              <p className="text-xs text-slate-400">RAM usage</p>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader className="pb-3">
-              <CardTitle className="text-white flex items-center">
-                <Globe className="h-5 w-5 mr-2 text-purple-400" />
-                Requests/min
+              <CardTitle className="text-white flex items-center text-sm font-medium">
+                <HardDrive className="h-4 w-4 mr-2 text-purple-400" />
+                Disk
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-white">247</div>
-              <p className="text-sm text-slate-400">Last 5 minutes</p>
-              <div className="flex items-center mt-2">
-                <TrendingUp className="h-4 w-4 text-green-400 mr-1" />
-                <span className="text-green-400 text-sm">+15% from last hour</span>
-              </div>
+              <div className="text-2xl font-bold text-white">{currentStats.disk} MB</div>
+              <p className="text-xs text-slate-400">Storage used</p>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader className="pb-3">
-              <CardTitle className="text-white flex items-center">
-                <Zap className="h-5 w-5 mr-2 text-yellow-400" />
-                Response Time
+              <CardTitle className="text-white flex items-center text-sm font-medium">
+                <Network className="h-4 w-4 mr-2 text-yellow-400" />
+                Network
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-white">142ms</div>
-              <p className="text-sm text-slate-400">95th percentile</p>
-              <div className="flex items-center mt-2">
-                <span className="text-green-400 text-sm">Within SLA</span>
-              </div>
+              <div className="text-2xl font-bold text-white">{currentStats.network.toFixed(1)} MB</div>
+              <p className="text-xs text-slate-400">Avg I/O</p>
             </CardContent>
           </Card>
         </div>
 
+        {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="bg-slate-800 border-slate-700">
             <CardHeader>
-              <CardTitle className="text-white">CPU Usage Over Time</CardTitle>
+              <CardTitle className="text-white">CPU & Memory Usage</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={cpuData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="time" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1e293b', 
-                      border: '1px solid #475569',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke="#22c55e" 
-                    fill="#22c55e" 
-                    fillOpacity={0.2}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-800 border-slate-700">
-            <CardHeader>
-              <CardTitle className="text-white">Memory Usage</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={memoryData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="time" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1e293b', 
-                      border: '1px solid #475569',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="used" 
-                    stroke="#3b82f6" 
-                    fill="#3b82f6" 
-                    fillOpacity={0.3}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-800 border-slate-700">
-            <CardHeader>
-              <CardTitle className="text-white">Request Volume</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={requestsData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="time" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1e293b', 
-                      border: '1px solid #475569',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Bar dataKey="requests" fill="#8b5cf6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-800 border-slate-700">
-            <CardHeader>
-              <CardTitle className="text-white">Response Times</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={responseTimeData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis dataKey="time" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1e293b', 
-                      border: '1px solid #475569',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Line type="monotone" dataKey="p50" stroke="#10b981" strokeWidth={2} />
-                  <Line type="monotone" dataKey="p95" stroke="#f59e0b" strokeWidth={2} />
-                  <Line type="monotone" dataKey="p99" stroke="#ef4444" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="bg-slate-800 border-slate-700">
-            <CardHeader>
-              <CardTitle className="text-white">Status Code Distribution</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={statusCodesData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={80}
-                    dataKey="value"
-                  >
-                    {statusCodesData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex justify-center space-x-4 mt-4">
-                {statusCodesData.map((entry) => (
-                  <div key={entry.name} className="flex items-center">
-                    <div 
-                      className="w-3 h-3 rounded-full mr-2" 
-                      style={{ backgroundColor: entry.color }}
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={formatChartData(resourceData)}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="time" stroke="#9CA3AF" fontSize={12} />
+                    <YAxis stroke="#9CA3AF" fontSize={12} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F2937', 
+                        border: '1px solid #374151',
+                        borderRadius: '6px'
+                      }}
                     />
-                    <span className="text-sm text-slate-300">
-                      {entry.name}: {entry.value}%
-                    </span>
-                  </div>
-                ))}
+                    <Line type="monotone" dataKey="cpu" stroke="#3B82F6" strokeWidth={2} name="CPU %" />
+                    <Line type="monotone" dataKey="memory" stroke="#10B981" strokeWidth={2} name="Memory MB" />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-800 border-slate-700 lg:col-span-2">
+          <Card className="bg-slate-800 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white">Network Traffic</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={formatChartData(resourceData)}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="time" stroke="#9CA3AF" fontSize={12} />
+                    <YAxis stroke="#9CA3AF" fontSize={12} />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1F2937', 
+                        border: '1px solid #374151',
+                        borderRadius: '6px'
+                      }}
+                    />
+                    <Area type="monotone" dataKey="networkIn" stackId="1" stroke="#F59E0B" fill="#F59E0B" name="Inbound MB" />
+                    <Area type="monotone" dataKey="networkOut" stackId="1" stroke="#EF4444" fill="#EF4444" name="Outbound MB" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Resource Alerts */}
+        {(currentStats.cpu > 80 || currentStats.memory > 200) && (
+          <Card className="bg-slate-800 border-red-500">
             <CardHeader>
               <CardTitle className="text-white flex items-center">
-                <AlertTriangle className="h-5 w-5 mr-2 text-yellow-400" />
-                Recent Alerts
+                <AlertTriangle className="h-5 w-5 mr-2 text-red-400" />
+                Resource Alerts
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {alerts.map((alert) => (
-                  <div 
-                    key={alert.id} 
-                    className={`border rounded-lg p-4 ${getAlertColor(alert.type)}`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-3">
-                        {getAlertIcon(alert.type)}
-                        <div>
-                          <h4 className="text-white font-medium">{alert.title}</h4>
-                          <p className="text-slate-300 text-sm">{alert.description}</p>
-                          <div className="flex items-center space-x-2 mt-2">
-                            <Badge variant="outline" className="border-slate-600 text-slate-300">
-                              {alert.project}
-                            </Badge>
-                            <span className="text-slate-400 text-xs flex items-center">
-                              <Clock className="h-3 w-3 mr-1" />
-                              {alert.timestamp}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <Button size="sm" variant="ghost" className="text-slate-400">
-                        Dismiss
-                      </Button>
+              <div className="space-y-2">
+                {currentStats.cpu > 80 && (
+                  <div className="flex items-center justify-between p-3 bg-red-900/20 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <Cpu className="h-4 w-4 text-red-400" />
+                      <span className="text-white">High CPU Usage</span>
                     </div>
+                    <Badge className="bg-red-600 text-white">{currentStats.cpu.toFixed(1)}%</Badge>
                   </div>
-                ))}
+                )}
+                {currentStats.memory > 200 && (
+                  <div className="flex items-center justify-between p-3 bg-red-900/20 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <Activity className="h-4 w-4 text-red-400" />
+                      <span className="text-white">High Memory Usage</span>
+                    </div>
+                    <Badge className="bg-red-600 text-white">{currentStats.memory} MB</Badge>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
-        </div>
+        )}
       </div>
     </DashboardLayout>
   );

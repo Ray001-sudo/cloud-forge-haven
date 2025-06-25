@@ -9,30 +9,140 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      build_logs: {
+        Row: {
+          created_at: string
+          deployment_id: string | null
+          id: string
+          log_level: string
+          message: string
+          project_id: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          deployment_id?: string | null
+          id?: string
+          log_level?: string
+          message: string
+          project_id: string
+          source?: string
+        }
+        Update: {
+          created_at?: string
+          deployment_id?: string | null
+          id?: string
+          log_level?: string
+          message?: string
+          project_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "build_logs_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "deployments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "build_logs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cron_jobs: {
+        Row: {
+          command: string
+          created_at: string
+          error_count: number
+          id: string
+          last_output: string | null
+          last_run: string | null
+          name: string
+          next_run: string
+          project_id: string
+          schedule: string
+          status: string
+          success_count: number
+          updated_at: string
+        }
+        Insert: {
+          command: string
+          created_at?: string
+          error_count?: number
+          id?: string
+          last_output?: string | null
+          last_run?: string | null
+          name: string
+          next_run: string
+          project_id: string
+          schedule: string
+          status?: string
+          success_count?: number
+          updated_at?: string
+        }
+        Update: {
+          command?: string
+          created_at?: string
+          error_count?: number
+          id?: string
+          last_output?: string | null
+          last_run?: string | null
+          name?: string
+          next_run?: string
+          project_id?: string
+          schedule?: string
+          status?: string
+          success_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cron_jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deployments: {
         Row: {
+          build_duration: number | null
+          build_status: string | null
           commit_hash: string | null
           commit_message: string | null
           created_at: string | null
           deployed_at: string | null
+          deployment_url: string | null
           id: string
           project_id: string
           status: string | null
         }
         Insert: {
+          build_duration?: number | null
+          build_status?: string | null
           commit_hash?: string | null
           commit_message?: string | null
           created_at?: string | null
           deployed_at?: string | null
+          deployment_url?: string | null
           id?: string
           project_id: string
           status?: string | null
         }
         Update: {
+          build_duration?: number | null
+          build_status?: string | null
           commit_hash?: string | null
           commit_message?: string | null
           created_at?: string | null
           deployed_at?: string | null
+          deployment_url?: string | null
           id?: string
           project_id?: string
           status?: string | null
@@ -88,17 +198,25 @@ export type Database = {
           app_type: string
           branch: string | null
           build_command: string | null
+          container_id: string | null
           container_status: string | null
+          cpu_limit: number | null
           created_at: string | null
           custom_domain: string | null
           description: string | null
+          disk_limit: number | null
+          docker_image: string | null
           environment_variables: Json | null
           id: string
           last_deployed_at: string | null
           name: string
+          port: number | null
+          ram_limit: number | null
           repository_url: string | null
           runtime: string
+          ssl_enabled: boolean | null
           start_command: string | null
+          subdomain: string | null
           updated_at: string | null
           user_id: string
         }
@@ -106,17 +224,25 @@ export type Database = {
           app_type: string
           branch?: string | null
           build_command?: string | null
+          container_id?: string | null
           container_status?: string | null
+          cpu_limit?: number | null
           created_at?: string | null
           custom_domain?: string | null
           description?: string | null
+          disk_limit?: number | null
+          docker_image?: string | null
           environment_variables?: Json | null
           id?: string
           last_deployed_at?: string | null
           name: string
+          port?: number | null
+          ram_limit?: number | null
           repository_url?: string | null
           runtime: string
+          ssl_enabled?: boolean | null
           start_command?: string | null
+          subdomain?: string | null
           updated_at?: string | null
           user_id: string
         }
@@ -124,28 +250,127 @@ export type Database = {
           app_type?: string
           branch?: string | null
           build_command?: string | null
+          container_id?: string | null
           container_status?: string | null
+          cpu_limit?: number | null
           created_at?: string | null
           custom_domain?: string | null
           description?: string | null
+          disk_limit?: number | null
+          docker_image?: string | null
           environment_variables?: Json | null
           id?: string
           last_deployed_at?: string | null
           name?: string
+          port?: number | null
+          ram_limit?: number | null
           repository_url?: string | null
           runtime?: string
+          ssl_enabled?: boolean | null
           start_command?: string | null
+          subdomain?: string | null
           updated_at?: string | null
           user_id?: string
         }
         Relationships: []
+      }
+      resource_usage: {
+        Row: {
+          cpu_usage: number
+          disk_usage: number
+          id: string
+          memory_usage: number
+          network_in: number
+          network_out: number
+          project_id: string
+          recorded_at: string
+        }
+        Insert: {
+          cpu_usage?: number
+          disk_usage?: number
+          id?: string
+          memory_usage?: number
+          network_in?: number
+          network_out?: number
+          project_id: string
+          recorded_at?: string
+        }
+        Update: {
+          cpu_usage?: number
+          disk_usage?: number
+          id?: string
+          memory_usage?: number
+          network_in?: number
+          network_out?: number
+          project_id?: string
+          recorded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resource_usage_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      webhook_requests: {
+        Row: {
+          body: string | null
+          headers: Json
+          id: string
+          ip_address: unknown | null
+          method: string
+          processed_at: string
+          project_id: string
+          response_status: number | null
+          url: string
+          user_agent: string | null
+        }
+        Insert: {
+          body?: string | null
+          headers?: Json
+          id?: string
+          ip_address?: unknown | null
+          method: string
+          processed_at?: string
+          project_id: string
+          response_status?: number | null
+          url: string
+          user_agent?: string | null
+        }
+        Update: {
+          body?: string | null
+          headers?: Json
+          id?: string
+          ip_address?: unknown | null
+          method?: string
+          processed_at?: string
+          project_id?: string
+          response_status?: number | null
+          url?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_requests_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_next_cron_run: {
+        Args: { cron_expression: string; from_time?: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
