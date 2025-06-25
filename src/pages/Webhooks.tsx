@@ -1,79 +1,59 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
-  Webhook, 
-  Copy, 
-  Trash2, 
-  Play, 
-  Plus,
-  Eye,
-  EyeOff,
-  Clock,
-  Code,
-  Loader2
+  Globe, 
+  Activity, 
+  Clock, 
+  RefreshCw, 
+  Filter,
+  ExternalLink,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface WebhookRequest {
   id: string;
+  project_id: string;
   method: string;
   url: string;
-  headers: any;
-  body: string | null;
-  ip_address: string;
-  user_agent: string;
-  response_status: number;
+  headers: Record<string, string>;
+  body?: string;
+  ip_address?: string;
+  user_agent?: string;
+  response_status?: number;
   processed_at: string;
-  project_id: string;
   projects?: {
     name: string;
+    subdomain: string;
   };
-}
-
-interface Project {
-  id: string;
-  name: string;
-  subdomain: string;
 }
 
 const Webhooks = () => {
   const { user } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>('');
   const [webhookRequests, setWebhookRequests] = useState<WebhookRequest[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<WebhookRequest | null>(null);
-  const [showBody, setShowBody] = useState<Record<string, boolean>>({});
-  const [replayUrl, setReplayUrl] = useState('');
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('');
 
   useEffect(() => {
     if (user) {
-      loadProjects();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (selectedProject) {
       loadWebhookRequests();
-      // Set up real-time subscription for new webhook requests
+      
+      // Set up real-time subscription
       const subscription = supabase
         .channel('webhook_requests')
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
-          table: 'webhook_requests',
-          filter: `project_id=eq.${selectedProject}`
+          table: 'webhook_requests'
         }, (payload) => {
-          setWebhookRequests(prev => [payload.new as WebhookRequest, ...prev]);
+          loadWebhookRequests(); // Reload to get project info
         })
         .subscribe();
 
@@ -81,367 +61,210 @@ const Webhooks = () => {
         subscription.unsubscribe();
       };
     }
-  }, [selectedProject]);
+  }, [user]);
 
-  const loadProjects = async () => {
+  const loadWebhookRequests = async () => {
     try {
-      const { data, error } = await supabase
+      setLoading(true);
+      
+      // Get user's projects first
+      const { data: projects, error: projectsError } = await supabase
         .from('projects')
-        .select('id, name, subdomain')
-        .eq('user_id', user?.id)
-        .order('name');
+        .select('id')
+        .eq('user_id', user?.id);
+
+      if (projectsError) throw projectsError;
+
+      if (!projects || projects.length === 0) {
+        setWebhookRequests([]);
+        return;
+      }
+
+      const projectIds = projects.map(p => p.id);
+
+      // Get webhook requests for user's projects
+      const { data, error } = await supabase
+        .from('webhook_requests')
+        .select(`
+          *,
+          projects!inner (
+            name,
+            subdomain
+          )
+        `)
+        .in('project_id', projectIds)
+        .order('processed_at', { ascending: false })
+        .limit(50);
 
       if (error) throw error;
-      
-      setProjects(data || []);
-      if (data && data.length > 0 && !selectedProject) {
-        setSelectedProject(data[0].id);
-      }
+
+      // Transform the data to match our interface
+      const transformedData = data?.map(item => ({
+        id: item.id,
+        project_id: item.project_id,
+        method: item.method,
+        url: item.url,
+        headers: typeof item.headers === 'object' ? item.headers as Record<string, string> : {},
+        body: item.body || undefined,
+        ip_address: item.ip_address ? String(item.ip_address) : undefined,
+        user_agent: item.user_agent || undefined,
+        response_status: item.response_status || undefined,
+        processed_at: item.processed_at,
+        projects: {
+          name: item.projects.name,
+          subdomain: item.projects.subdomain
+        }
+      })) || [];
+
+      setWebhookRequests(transformedData);
     } catch (error) {
-      console.error('Error loading projects:', error);
-      toast.error('Failed to load projects');
+      console.error('Error loading webhook requests:', error);
+      toast.error('Failed to load webhook requests');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadWebhookRequests = async () => {
-    if (!selectedProject) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('webhook_requests')
-        .select(`
-          *,
-          projects (
-            name
-          )
-        `)
-        .eq('project_id', selectedProject)
-        .order('processed_at', { ascending: false })
-        .limit(50);
-
-      if (error) throw error;
-      setWebhookRequests((data || []).map(request => ({
-        ...request,
-        headers: request.headers as Record<string, string>
-      })));
-    } catch (error) {
-      console.error('Error loading webhook requests:', error);
-      toast.error('Failed to load webhook requests');
-    }
-  };
-
-  const generateWebhookUrl = (projectId: string) => {
-    return `https://rfkktecqygejiwtcvgld.supabase.co/functions/v1/webhook-handler/${projectId}`;
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success('Copied to clipboard');
-  };
-
-  const clearRequests = async () => {
-    if (!selectedProject) return;
-
-    try {
-      const { error } = await supabase
-        .from('webhook_requests')
-        .delete()
-        .eq('project_id', selectedProject);
-
-      if (error) throw error;
-
-      setWebhookRequests([]);
-      toast.success('All requests cleared');
-    } catch (error) {
-      console.error('Error clearing requests:', error);
-      toast.error('Failed to clear requests');
-    }
-  };
-
-  const toggleBodyVisibility = (requestId: string) => {
-    setShowBody(prev => ({
-      ...prev,
-      [requestId]: !prev[requestId]
-    }));
-  };
-
-  const replayRequest = async (request: WebhookRequest) => {
-    if (!replayUrl) {
-      toast.error('Please enter a replay URL');
-      return;
-    }
-
-    try {
-      const response = await fetch(replayUrl, {
-        method: request.method,
-        headers: {
-          'Content-Type': 'application/json',
-          ...request.headers
-        },
-        body: request.body || undefined
-      });
-
-      if (response.ok) {
-        toast.success(`Request replayed to ${replayUrl}`);
-      } else {
-        toast.error(`Replay failed with status ${response.status}`);
-      }
-    } catch (error) {
-      console.error('Error replaying request:', error);
-      toast.error('Failed to replay request');
-    }
+  const getStatusColor = (status?: number) => {
+    if (!status) return 'bg-gray-600';
+    if (status >= 200 && status < 300) return 'bg-green-600';
+    if (status >= 400 && status < 500) return 'bg-yellow-600';
+    if (status >= 500) return 'bg-red-600';
+    return 'bg-gray-600';
   };
 
   const getMethodColor = (method: string) => {
-    switch (method) {
-      case 'GET': return 'bg-green-600';
-      case 'POST': return 'bg-blue-600';
-      case 'PUT': return 'bg-yellow-600';
-      case 'DELETE': return 'bg-red-600';
-      default: return 'bg-gray-600';
+    switch (method.toUpperCase()) {
+      case 'GET': return 'text-green-400';
+      case 'POST': return 'text-blue-400';
+      case 'PUT': return 'text-yellow-400';
+      case 'DELETE': return 'text-red-400';
+      default: return 'text-slate-400';
     }
   };
 
-  const selectedProjectData = projects.find(p => p.id === selectedProject);
-  const webhookUrl = selectedProject ? generateWebhookUrl(selectedProject) : '';
-
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-sky-400" />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (projects.length === 0) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <Webhook className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-white mb-2">No Projects Found</h3>
-            <p className="text-slate-400">Create a project to start receiving webhooks</p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const filteredRequests = webhookRequests.filter(request =>
+    request.url.toLowerCase().includes(filter.toLowerCase()) ||
+    request.method.toLowerCase().includes(filter.toLowerCase()) ||
+    request.projects?.name.toLowerCase().includes(filter.toLowerCase())
+  );
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white">Webhook Tester</h1>
-            <p className="text-slate-400 mt-1">Test and debug incoming webhooks</p>
+            <h1 className="text-3xl font-bold text-white">Webhooks</h1>
+            <p className="text-slate-400 mt-1">
+              Monitor incoming webhook requests to your projects
+            </p>
           </div>
-          <div className="flex space-x-2">
-            <Select value={selectedProject} onValueChange={setSelectedProject}>
-              <SelectTrigger className="w-48 bg-slate-800 border-slate-700 text-white">
-                <SelectValue placeholder="Select project" />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-800 border-slate-700">
-                {projects.map(project => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={clearRequests} variant="outline" className="border-red-600 text-red-400">
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear All
+          <div className="flex items-center space-x-3">
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+              <Input
+                placeholder="Filter webhooks..."
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                className="pl-10 bg-slate-700 border-slate-600 text-white"
+              />
+            </div>
+            <Button
+              onClick={loadWebhookRequests}
+              variant="outline"
+              className="border-slate-600"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
             </Button>
           </div>
         </div>
 
-        {selectedProjectData && (
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-slate-400">Loading webhook requests...</div>
+          </div>
+        ) : filteredRequests.length === 0 ? (
           <Card className="bg-slate-800 border-slate-700">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center">
-                <Webhook className="h-5 w-5 mr-2 text-sky-400" />
-                Webhook URL for {selectedProjectData.name}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center space-x-2">
-                <Input
-                  value={webhookUrl}
-                  readOnly
-                  className="flex-1 bg-slate-700 border-slate-600 text-white font-mono"
-                />
-                <Button
-                  onClick={() => copyToClipboard(webhookUrl)}
-                  variant="outline"
-                  className="border-slate-600"
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
-              <p className="text-sm text-slate-400 mt-2">
-                Send requests to this URL to test your webhooks. All requests will be logged below.
+            <CardContent className="py-12 text-center">
+              <Globe className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-white mb-2">No webhook requests</h3>
+              <p className="text-slate-400">
+                {webhookRequests.length === 0 
+                  ? "No webhook requests have been received yet." 
+                  : "No webhook requests match your filter criteria."}
               </p>
             </CardContent>
           </Card>
-        )}
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-xl font-semibold text-white">
-              Captured Requests ({webhookRequests.length})
-            </h2>
-            {webhookRequests.length === 0 ? (
-              <Card className="bg-slate-800 border-slate-700 text-center py-12">
-                <CardContent>
-                  <Webhook className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-white mb-2">No requests yet</h3>
-                  <p className="text-slate-400">Send a request to your webhook URL to see it here</p>
-                </CardContent>
-              </Card>
-            ) : (
-              webhookRequests.map((request) => (
-                <Card key={request.id} className="bg-slate-800 border-slate-700">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <Badge className={`${getMethodColor(request.method)} text-white`}>
+        ) : (
+          <div className="space-y-4">
+            {filteredRequests.map((request) => (
+              <Card key={request.id} className="bg-slate-800 border-slate-700">
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <Badge className={getMethodColor(request.method)}>
                           {request.method}
                         </Badge>
-                        <span className="text-white font-mono">{request.url}</span>
-                        <span className="text-slate-400 text-sm flex items-center">
-                          <Clock className="h-3 w-3 mr-1" />
-                          {new Date(request.processed_at).toLocaleString()}
+                        {request.response_status && (
+                          <Badge className={`${getStatusColor(request.response_status)} text-white`}>
+                            {request.response_status}
+                          </Badge>
+                        )}
+                        <span className="text-slate-400 text-sm">
+                          {request.projects?.name}
                         </span>
                       </div>
-                      <Button
-                        onClick={() => setSelectedRequest(request)}
-                        size="sm"
-                        variant="outline"
-                        className="border-slate-600"
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Details
-                      </Button>
+                      
+                      <div className="font-mono text-sm text-slate-300 mb-2">
+                        {request.url}
+                      </div>
+                      
+                      <div className="flex items-center space-x-4 text-sm text-slate-400">
+                        <div className="flex items-center">
+                          <Clock className="h-4 w-4 mr-1" />
+                          {new Date(request.processed_at).toLocaleString()}
+                        </div>
+                        {request.ip_address && (
+                          <div>IP: {request.ip_address}</div>
+                        )}
+                        {request.user_agent && (
+                          <div className="truncate max-w-xs">
+                            {request.user_agent}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-slate-400">
-                          Headers ({Object.keys(request.headers).length})
-                        </span>
+                    
+                    <div className="flex items-center space-x-2">
+                      {request.projects?.subdomain && (
                         <Button
-                          onClick={() => toggleBodyVisibility(request.id)}
                           size="sm"
                           variant="ghost"
-                          className="text-slate-400"
+                          onClick={() => window.open(`https://${request.projects.subdomain}.cloudforge.dev`, '_blank')}
                         >
-                          {showBody[request.id] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          <ExternalLink className="h-4 w-4" />
                         </Button>
-                      </div>
-                      {showBody[request.id] && (
-                        <div className="bg-slate-900 rounded-lg p-3">
-                          <pre className="text-xs text-slate-300 overflow-x-auto">
-                            {JSON.stringify(request.headers, null, 2)}
-                          </pre>
-                        </div>
                       )}
-                      <div className="text-sm text-slate-400">
-                        Body: {request.body ? `${request.body.length} characters` : 'Empty'}
-                      </div>
-                      <div className="text-sm text-slate-400">
-                        IP: {request.ip_address} • Status: {request.response_status}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
-
-          <div className="space-y-6">
-            <Card className="bg-slate-800 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center">
-                  <Play className="h-5 w-5 mr-2 text-green-400" />
-                  Replay Request
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="replay-url" className="text-white">Target URL</Label>
-                  <Input
-                    id="replay-url"
-                    value={replayUrl}
-                    onChange={(e) => setReplayUrl(e.target.value)}
-                    placeholder="https://api.example.com/webhook"
-                    className="bg-slate-700 border-slate-600 text-white"
-                  />
-                </div>
-                <Button
-                  onClick={() => selectedRequest && replayRequest(selectedRequest)}
-                  disabled={!selectedRequest || !replayUrl}
-                  className="w-full bg-sky-600 hover:bg-sky-700 disabled:opacity-50"
-                >
-                  Replay Selected Request
-                </Button>
-              </CardContent>
-            </Card>
-
-            {selectedRequest && (
-              <Card className="bg-slate-800 border-slate-700">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center">
-                    <Code className="h-5 w-5 mr-2 text-purple-400" />
-                    Request Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label className="text-white">Method & URL</Label>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <Badge className={`${getMethodColor(selectedRequest.method)} text-white`}>
-                        {selectedRequest.method}
-                      </Badge>
-                      <span className="text-slate-300 font-mono text-sm">{selectedRequest.url}</span>
                     </div>
                   </div>
-                  <div>
-                    <Label className="text-white">Headers</Label>
-                    <Textarea
-                      value={JSON.stringify(selectedRequest.headers, null, 2)}
-                      readOnly
-                      className="bg-slate-700 border-slate-600 text-white font-mono text-xs mt-1 h-32"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-white">Body</Label>
-                    <Textarea
-                      value={selectedRequest.body || 'No body'}
-                      readOnly
-                      className="bg-slate-700 border-slate-600 text-white font-mono text-xs mt-1 h-48"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-white">Request Info</Label>
-                    <div className="bg-slate-700 rounded p-3 mt-1">
-                      <div className="text-sm text-slate-300 space-y-1">
-                        <div>IP Address: {selectedRequest.ip_address}</div>
-                        <div>User Agent: {selectedRequest.user_agent}</div>
-                        <div>Response Status: {selectedRequest.response_status}</div>
-                        <div>Processed: {new Date(selectedRequest.processed_at).toLocaleString()}</div>
-                      </div>
+                  
+                  {request.body && (
+                    <div className="mt-4 p-3 bg-slate-900 rounded-lg">
+                      <div className="text-sm text-slate-400 mb-2">Request Body:</div>
+                      <pre className="text-xs text-slate-300 overflow-x-auto">
+                        {request.body.length > 500 
+                          ? `${request.body.substring(0, 500)}...` 
+                          : request.body}
+                      </pre>
                     </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
-            )}
+            ))}
           </div>
-        </div>
+        )}
       </div>
     </DashboardLayout>
   );

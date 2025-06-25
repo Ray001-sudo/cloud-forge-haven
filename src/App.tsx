@@ -10,6 +10,11 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
 import ProjectDetail from "./pages/ProjectDetail";
+import Deployments from "./pages/Deployments";
+import Bots from "./pages/Bots";
+import Files from "./pages/Files";
+import Logs from "./pages/Logs";
+import Settings from "./pages/Settings";
 import Billing from "./pages/Billing";
 import Webhooks from "./pages/Webhooks";
 import CronJobs from "./pages/CronJobs";
@@ -31,6 +36,11 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/dashboard/projects" element={<Projects />} />
             <Route path="/dashboard/projects/:projectId" element={<ProjectDetail />} />
+            <Route path="/dashboard/projects/:projectId/deployments" element={<Deployments />} />
+            <Route path="/dashboard/projects/:projectId/bots" element={<Bots />} />
+            <Route path="/dashboard/projects/:projectId/files" element={<Files />} />
+            <Route path="/dashboard/projects/:projectId/logs" element={<Logs />} />
+            <Route path="/dashboard/projects/:projectId/settings" element={<Settings />} />
             <Route path="/dashboard/billing" element={<Billing />} />
             <Route path="/dashboard/webhooks" element={<Webhooks />} />
             <Route path="/dashboard/cron" element={<CronJobs />} />
