@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -111,7 +110,10 @@ const CronJobs = () => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    setJobs(data || []);
+    setJobs((data || []).map(job => ({
+      ...job,
+      status: job.status as 'active' | 'paused' | 'error'
+    })));
   };
 
   const loadProjects = async () => {
@@ -134,6 +136,26 @@ const CronJobs = () => {
     try {
       setCreating(true);
       
+      // Calculate next run time
+      const nextRun = new Date();
+      switch (newJob.schedule) {
+        case '* * * * *':
+          nextRun.setMinutes(nextRun.getMinutes() + 1);
+          break;
+        case '*/5 * * * *':
+          nextRun.setMinutes(Math.ceil(nextRun.getMinutes() / 5) * 5);
+          break;
+        case '0 * * * *':
+          nextRun.setHours(nextRun.getHours() + 1, 0, 0, 0);
+          break;
+        case '0 0 * * *':
+          nextRun.setDate(nextRun.getDate() + 1);
+          nextRun.setHours(0, 0, 0, 0);
+          break;
+        default:
+          nextRun.setHours(nextRun.getHours() + 1);
+      }
+      
       const { error } = await supabase
         .from('cron_jobs')
         .insert({
@@ -141,7 +163,8 @@ const CronJobs = () => {
           schedule: newJob.schedule,
           command: newJob.command,
           project_id: newJob.project_id,
-          status: 'active'
+          status: 'active',
+          next_run: nextRun.toISOString()
         });
 
       if (error) throw error;
@@ -200,10 +223,10 @@ const CronJobs = () => {
 
   const runJobNow = async (jobId: string) => {
     try {
-      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/cron-executor`, {
+      const response = await fetch(`https://rfkktecqygejiwtcvgld.supabase.co/functions/v1/cron-executor`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${supabase.supabaseKey}`,
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJma2t0ZWNxeWdlaml3dGN2Z2xkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA2MTg0ODQsImV4cCI6MjA2NjE5NDQ4NH0.l27EiR58K0y8JwZOD66S5LKP8GX_scA-yZrUmwkqUSg`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ jobId })

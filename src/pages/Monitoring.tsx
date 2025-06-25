@@ -129,10 +129,10 @@ const Monitoring = () => {
 
   const fetchCurrentStats = async () => {
     try {
-      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/container-manager`, {
+      const response = await fetch(`https://rfkktecqygejiwtcvgld.supabase.co/functions/v1/container-manager`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${supabase.supabaseKey}`,
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJma2t0ZWNxeWdlaml3dGN2Z2xkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA2MTg0ODQsImV4cCI6MjA2NjE5NDQ4NH0.l27EiR58K0y8JwZOD66S5LKP8GX_scA-yZrUmwkqUSg`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({

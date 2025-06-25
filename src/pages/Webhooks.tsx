@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -28,7 +27,7 @@ interface WebhookRequest {
   id: string;
   method: string;
   url: string;
-  headers: Record<string, string>;
+  headers: any;
   body: string | null;
   ip_address: string;
   user_agent: string;
@@ -123,7 +122,10 @@ const Webhooks = () => {
         .limit(50);
 
       if (error) throw error;
-      setWebhookRequests(data || []);
+      setWebhookRequests((data || []).map(request => ({
+        ...request,
+        headers: request.headers as Record<string, string>
+      })));
     } catch (error) {
       console.error('Error loading webhook requests:', error);
       toast.error('Failed to load webhook requests');
@@ -131,8 +133,7 @@ const Webhooks = () => {
   };
 
   const generateWebhookUrl = (projectId: string) => {
-    const project = projects.find(p => p.id === projectId);
-    return `${supabase.supabaseUrl}/functions/v1/webhook-handler/${projectId}`;
+    return `https://rfkktecqygejiwtcvgld.supabase.co/functions/v1/webhook-handler/${projectId}`;
   };
 
   const copyToClipboard = (text: string) => {
