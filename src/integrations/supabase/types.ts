@@ -490,6 +490,44 @@ export type Database = {
           },
         ]
       }
+      terminal_commands: {
+        Row: {
+          command: string
+          executed_at: string | null
+          exit_code: number | null
+          id: string
+          output: string | null
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          command: string
+          executed_at?: string | null
+          exit_code?: number | null
+          id?: string
+          output?: string | null
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          command?: string
+          executed_at?: string | null
+          exit_code?: number | null
+          id?: string
+          output?: string | null
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "terminal_commands_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       webhook_requests: {
         Row: {
           body: string | null
@@ -545,6 +583,10 @@ export type Database = {
       calculate_next_cron_run: {
         Args: { cron_expression: string; from_time?: string }
         Returns: string
+      }
+      execute_terminal_command: {
+        Args: { p_project_id: string; p_user_id: string; p_command: string }
+        Returns: Json
       }
     }
     Enums: {

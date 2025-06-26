@@ -1,30 +1,28 @@
 
 import React from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { 
-  LayoutDashboard, 
-  FolderOpen, 
-  Rocket, 
-  FileText, 
-  BarChart3, 
-  Clock, 
-  Webhook, 
-  Bot,
-  Terminal as TerminalIcon,
-  Files,
+import {
+  LayoutDashboard,
+  FolderOpen,
+  CreditCard,
   Settings,
-  CreditCard
+  FileText,
+  Activity,
+  Clock,
+  Webhook,
+  Bot,
+  Files,
+  Terminal,
+  Rocket
 } from 'lucide-react';
 
-interface SidebarProps {
-  projectId?: string;
-}
-
-const Sidebar: React.FC<SidebarProps> = ({ projectId }) => {
+const Sidebar = () => {
   const location = useLocation();
+  const projectId = location.pathname.split('/')[2];
+  const isProjectPage = location.pathname.startsWith('/project/');
 
-  const dashboardItems = [
+  const mainNavItems = [
     {
       title: 'Dashboard',
       href: '/dashboard',
@@ -42,16 +40,11 @@ const Sidebar: React.FC<SidebarProps> = ({ projectId }) => {
     },
   ];
 
-  const projectItems = projectId ? [
+  const projectNavItems = projectId ? [
     {
       title: 'Overview',
       href: `/project/${projectId}`,
       icon: LayoutDashboard,
-    },
-    {
-      title: 'Deployments',
-      href: `/project/${projectId}/deployments`,
-      icon: Rocket,
     },
     {
       title: 'Files',
@@ -61,7 +54,12 @@ const Sidebar: React.FC<SidebarProps> = ({ projectId }) => {
     {
       title: 'Terminal',
       href: `/project/${projectId}/terminal`,
-      icon: TerminalIcon,
+      icon: Terminal,
+    },
+    {
+      title: 'Deployments',
+      href: `/project/${projectId}/deployments`,
+      icon: Rocket,
     },
     {
       title: 'Logs',
@@ -71,7 +69,7 @@ const Sidebar: React.FC<SidebarProps> = ({ projectId }) => {
     {
       title: 'Monitoring',
       href: `/project/${projectId}/monitoring`,
-      icon: BarChart3,
+      icon: Activity,
     },
     {
       title: 'Cron Jobs',
@@ -95,36 +93,39 @@ const Sidebar: React.FC<SidebarProps> = ({ projectId }) => {
     },
   ] : [];
 
-  const items = projectId ? projectItems : dashboardItems;
+  const navItems = isProjectPage ? projectNavItems : mainNavItems;
 
   return (
-    <div className="w-64 bg-slate-900 border-r border-slate-800 h-screen overflow-y-auto">
+    <div className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
       <div className="p-6">
-        <Link to="/" className="flex items-center space-x-2">
+        <Link to="/dashboard" className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-sky-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold">CF</span>
+            <span className="text-white font-bold text-sm">CF</span>
           </div>
-          <span className="text-xl font-bold text-white">CloudForge</span>
+          <span className="text-white font-semibold text-xl">CloudForge</span>
         </Link>
       </div>
-      
-      <nav className="px-6 pb-6">
-        <div className="space-y-1">
-          {items.map((item) => (
-            <Link
-              key={item.href}
-              to={item.href}
-              className={cn(
-                'flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
-                location.pathname === item.href
-                  ? 'bg-sky-600 text-white'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
-              )}
-            >
-              <item.icon className="mr-3 h-5 w-5" />
-              {item.title}
-            </Link>
-          ))}
+
+      <nav className="flex-1 px-4 pb-4">
+        <div className="space-y-2">
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                className={cn(
+                  'flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                  isActive
+                    ? 'bg-sky-600 text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                )}
+              >
+                <item.icon className="mr-3 h-4 w-4" />
+                {item.title}
+              </Link>
+            );
+          })}
         </div>
       </nav>
     </div>
