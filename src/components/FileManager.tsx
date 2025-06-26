@@ -72,8 +72,8 @@ const FileManager: React.FC<FileManagerProps> = ({ projectId, projectName }) => 
   const loadFiles = async () => {
     try {
       setIsLoading(true);
-      // Use type casting to access the project_files table
-      const { data: projectFiles, error } = await (supabase as any)
+      
+      const { data: projectFiles, error } = await supabase
         .from('project_files')
         .select('*')
         .eq('project_id', projectId)
@@ -239,7 +239,7 @@ const FileManager: React.FC<FileManagerProps> = ({ projectId, projectName }) => 
         if (uploadError) throw uploadError;
 
         // Save file metadata to database
-        const { error: dbError } = await (supabase as any)
+        const { error: dbError } = await supabase
           .from('project_files')
           .insert({
             project_id: projectId,
@@ -285,7 +285,7 @@ const FileManager: React.FC<FileManagerProps> = ({ projectId, projectName }) => 
       if (error) throw error;
 
       // Update file metadata
-      const { error: updateError } = await (supabase as any)
+      const { error: updateError } = await supabase
         .from('project_files')
         .update({ 
           file_size: blob.size,
@@ -317,7 +317,7 @@ const FileManager: React.FC<FileManagerProps> = ({ projectId, projectName }) => 
       if (storageError) throw storageError;
 
       // Delete from database
-      const { error: dbError } = await (supabase as any)
+      const { error: dbError } = await supabase
         .from('project_files')
         .delete()
         .eq('id', file.id);
@@ -373,7 +373,7 @@ const FileManager: React.FC<FileManagerProps> = ({ projectId, projectName }) => 
       if (uploadError) throw uploadError;
 
       // Save folder metadata
-      const { error: dbError } = await (supabase as any)
+      const { error: dbError } = await supabase
         .from('project_files')
         .insert({
           project_id: projectId,

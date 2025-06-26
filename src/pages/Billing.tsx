@@ -3,245 +3,241 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
 import { 
   CreditCard, 
   Check, 
-  Crown, 
-  Zap, 
   Star,
+  Crown,
+  Zap,
   Calendar,
   DollarSign,
-  Loader2,
-  AlertCircle
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface BillingRecord {
+interface Payment {
   id: string;
-  plan: string;
   amount: number;
   currency: string;
   payment_method: string;
-  payment_status: string;
+  status: string;
+  plan_name: string;
   created_at: string;
-  processed_at: string | null;
+  billing_period_start?: string;
+  billing_period_end?: string;
 }
 
-interface PlanFeatures {
-  projects: number;
-  storage: string;
-  bandwidth: string;
-  terminal: boolean;
-  webhooks: boolean;
-  cron: boolean;
-  analytics: boolean;
-  support: string;
+interface Profile {
+  subscription_tier: string;
+  credits: number;
 }
-
-const plans = {
-  free: {
-    name: 'Free',
-    price: 0,
-    icon: <Star className="h-6 w-6" />,
-    color: 'text-gray-400',
-    features: {
-      projects: 1,
-      storage: '256MB',
-      bandwidth: '1GB',
-      terminal: false,
-      webhooks: false,
-      cron: false,
-      analytics: false,
-      support: 'Community'
-    }
-  },
-  pro: {
-    name: 'Pro',
-    price: 15,
-    icon: <Zap className="h-6 w-6" />,
-    color: 'text-blue-400',
-    features: {
-      projects: 10,
-      storage: '1GB',
-      bandwidth: '10GB',
-      terminal: true,
-      webhooks: true,
-      cron: true,
-      analytics: false,
-      support: 'Email'
-    }
-  },
-  elite: {
-    name: 'Elite',
-    price: 50,
-    icon: <Crown className="h-6 w-6" />,
-    color: 'text-yellow-400',
-    features: {
-      projects: 50,
-      storage: '4GB',
-      bandwidth: '50GB',
-      terminal: true,
-      webhooks: true,
-      cron: true,
-      analytics: true,
-      support: 'Priority'
-    }
-  }
-};
 
 const Billing = () => {
-  const { user, profile, refreshProfile } = useAuth();
-  const [billingHistory, setBillingHistory] = useState<BillingRecord[]>([]);
+  const { user } = useAuth();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<string | null>(null);
-  const [projectCount, setProjectCount] = useState(0);
+
+  const plans = [
+    {
+      id: 'free',
+      name: 'Free',
+      price: 0,
+      period: 'forever',
+      icon: Zap,
+      color: 'text-slate-400',
+      bgColor: 'bg-slate-100',
+      features: [
+        '1 Project',
+        '100 MB Storage',
+        '0.5 CPU Core',
+        '256 MB RAM',
+        'Basic Support'
+      ],
+      limits: {
+        projects: 1,
+        storage: 100, // MB
+        cpu: 0.5,
+        ram: 256
+      }
+    },
+    {
+      id: 'pro',
+      name: 'Pro',
+      price: 19,
+      period: 'month',
+      icon: Star,
+      color: 'text-blue-400',
+      bgColor: 'bg-blue-100',
+      popular: true,
+      features: [
+        '10 Projects',
+        '10 GB Storage',
+        '2 CPU Cores',
+        '2 GB RAM',
+        'Priority Support',
+        'Custom Domains',
+        'SSL Certificates'
+      ],
+      limits: {
+        projects: 10,
+        storage: 10240, // MB
+        cpu: 2,
+        ram: 2048
+      }
+    },
+    {
+      id: 'elite',
+      name: 'Elite',
+      price: 49,
+      period: 'month',
+      icon: Crown,
+      color: 'text-yellow-400',
+      bgColor: 'bg-yellow-100',
+      features: [
+        'Unlimited Projects',
+        '100 GB Storage',
+        '8 CPU Cores',
+        '8 GB RAM',
+        '24/7 Support',
+        'Custom Domains',
+        'SSL Certificates',
+        'Advanced Monitoring',
+        'Priority Deployment'
+      ],
+      limits: {
+        projects: -1, // unlimited
+        storage: 102400, // MB
+        cpu: 8,
+        ram: 8192
+      }
+    }
+  ];
 
   useEffect(() => {
     if (user) {
-      loadBillingData();
-      loadProjectCount();
+      loadUserData();
+      loadPaymentHistory();
     }
   }, [user]);
 
-  const loadBillingData = async () => {
+  const loadUserData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('subscription_tier, credits')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (error) throw error;
+      setProfile(data);
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      toast.error('Failed to load user profile');
+    }
+  };
+
+  const loadPaymentHistory = async () => {
     try {
       setLoading(true);
-      // Use type casting to access the billing_history table
-      const { data, error } = await (supabase as any)
-        .from('billing_history')
+      
+      const { data, error } = await supabase
+        .from('payments')
         .select('*')
         .eq('user_id', user?.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setBillingHistory(data || []);
+      setPayments(data || []);
     } catch (error) {
-      console.error('Error loading billing data:', error);
-      toast.error('Failed to load billing history');
+      console.error('Error loading payment history:', error);
+      toast.error('Failed to load payment history');
     } finally {
       setLoading(false);
     }
   };
 
-  const loadProjectCount = async () => {
-    try {
-      const { count, error } = await supabase
-        .from('projects')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user?.id);
+  const handleUpgrade = async (planId: string) => {
+    if (!user || !profile) return;
 
-      if (error) throw error;
-      setProjectCount(count || 0);
-    } catch (error) {
-      console.error('Error loading project count:', error);
-    }
-  };
-
-  const handleUpgrade = async (planName: string, paymentMethod: 'stripe' | 'paypal' | 'mpesa') => {
-    const plan = plans[planName as keyof typeof plans];
-    if (!plan) return;
+    setUpgrading(planId);
 
     try {
-      setUpgrading(planName);
+      const plan = plans.find(p => p.id === planId);
+      if (!plan) throw new Error('Plan not found');
 
       // Simulate payment processing
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Create billing record
-      const { error: billingError } = await (supabase as any)
-        .from('billing_history')
+      // Update user profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ subscription_tier: planId })
+        .eq('user_id', user.id);
+
+      if (profileError) throw profileError;
+
+      // Create payment record
+      const { error: paymentError } = await supabase
+        .from('payments')
         .insert({
-          user_id: user?.id,
-          plan: planName,
+          user_id: user.id,
           amount: plan.price,
           currency: 'USD',
-          payment_method: paymentMethod,
+          payment_method: 'stripe',
+          status: 'completed',
+          plan_name: plan.name,
+          billing_period_start: new Date().toISOString(),
+          billing_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          metadata: { plan_id: planId }
+        });
+
+      if (paymentError) throw paymentError;
+
+      // Create billing history record
+      const { error: historyError } = await supabase
+        .from('billing_history')
+        .insert({
+          user_id: user.id,
+          plan: plan.name,
+          amount: plan.price,
+          currency: 'USD',
+          payment_method: 'stripe',
           payment_status: 'completed',
           processed_at: new Date().toISOString()
         });
 
-      if (billingError) throw billingError;
-
-      // Update user subscription tier
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ subscription_tier: planName })
-        .eq('user_id', user?.id);
-
-      if (profileError) throw profileError;
+      if (historyError) throw historyError;
 
       toast.success(`Successfully upgraded to ${plan.name} plan!`);
-      await refreshProfile();
-      loadBillingData();
+      loadUserData();
+      loadPaymentHistory();
     } catch (error) {
       console.error('Error upgrading plan:', error);
-      toast.error('Failed to upgrade plan. Please try again.');
+      toast.error('Failed to upgrade plan');
     } finally {
       setUpgrading(null);
     }
   };
 
-  const simulateStripePayment = (planName: string) => {
-    toast.info('Redirecting to Stripe...');
-    setTimeout(() => {
-      handleUpgrade(planName, 'stripe');
-    }, 1000);
-  };
-
-  const simulatePayPalPayment = (planName: string) => {
-    toast.info('Redirecting to PayPal...');
-    setTimeout(() => {
-      handleUpgrade(planName, 'paypal');
-    }, 1000);
-  };
-
-  const simulateMpesaPayment = (planName: string) => {
-    const phoneNumber = prompt('Enter your M-PESA phone number:');
-    if (phoneNumber) {
-      toast.info('M-PESA STK push sent to your phone...');
-      setTimeout(() => {
-        handleUpgrade(planName, 'mpesa');
-      }, 3000);
-    }
-  };
-
-  const currentPlan = plans[profile?.subscription_tier as keyof typeof plans] || plans.free;
-  const currentPlanKey = profile?.subscription_tier || 'free';
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed': return 'bg-green-600';
-      case 'pending': return 'bg-yellow-600';
-      case 'failed': return 'bg-red-600';
-      default: return 'bg-gray-600';
-    }
-  };
-
-  if (loading) {
-    return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-[#38BDF8]" />
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const currentPlan = plans.find(p => p.id === profile?.subscription_tier) || plans[0];
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-white">Billing & Plans</h1>
-          <p className="text-slate-400 mt-1">Manage your subscription and billing information</p>
+          <h1 className="text-3xl font-bold text-white">Billing & Subscription</h1>
+          <p className="text-slate-400 mt-1">
+            Manage your subscription and payment methods
+          </p>
         </div>
 
-        {/* Current Plan Status */}
-        <Card className="bg-[#1E293B] border-slate-700">
+        {/* Current Plan */}
+        <Card className="bg-slate-800 border-slate-700">
           <CardHeader>
             <CardTitle className="text-white flex items-center">
               <CreditCard className="h-5 w-5 mr-2" />
@@ -249,267 +245,143 @@ const Billing = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <div className={currentPlan.color}>
-                  {currentPlan.icon}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className={`p-3 rounded-lg ${currentPlan.bgColor}`}>
+                  <currentPlan.icon className={`h-6 w-6 ${currentPlan.color}`} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white">{currentPlan.name}</h3>
+                  <h3 className="text-xl font-semibold text-white">{currentPlan.name}</h3>
                   <p className="text-slate-400">
-                    ${currentPlan.price}/month {currentPlan.price === 0 && '(Free forever)'}
+                    {currentPlan.price === 0 ? 'Free forever' : `$${currentPlan.price}/${currentPlan.period}`}
                   </p>
                 </div>
               </div>
-              {currentPlanKey !== 'elite' && (
-                <Badge className="bg-green-600 text-white">
-                  Upgrade Available
-                </Badge>
-              )}
-            </div>
-
-            {/* Usage Overview */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-slate-400 text-sm">Projects</div>
-                <div className="text-white text-lg font-semibold">
-                  {projectCount} / {currentPlan.features.projects}
-                </div>
-                <Progress 
-                  value={(projectCount / currentPlan.features.projects) * 100} 
-                  className="mt-2 h-2"
-                />
-              </div>
-              
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-slate-400 text-sm">Storage</div>
-                <div className="text-white text-lg font-semibold">{currentPlan.features.storage}</div>
-              </div>
-              
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-slate-400 text-sm">Bandwidth</div>
-                <div className="text-white text-lg font-semibold">{currentPlan.features.bandwidth}</div>
-              </div>
-              
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-slate-400 text-sm">Support</div>
-                <div className="text-white text-lg font-semibold">{currentPlan.features.support}</div>
+              <div className="text-right">
+                <p className="text-sm text-slate-400">Credits Available</p>
+                <p className="text-2xl font-bold text-white">{profile?.credits || 0}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="plans" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 bg-slate-800">
-            <TabsTrigger value="plans" className="data-[state=active]:bg-[#38BDF8] data-[state=active]:text-white">
-              Available Plans
-            </TabsTrigger>
-            <TabsTrigger value="history" className="data-[state=active]:bg-[#38BDF8] data-[state=active]:text-white">
-              Billing History
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="plans">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {Object.entries(plans).map(([key, plan]) => (
-                <Card 
-                  key={key} 
-                  className={`bg-[#1E293B] border-slate-700 relative ${
-                    currentPlanKey === key ? 'ring-2 ring-[#38BDF8]' : ''
-                  }`}
-                >
-                  {currentPlanKey === key && (
-                    <Badge className="absolute -top-2 left-1/2 transform -translate-x-1/2 bg-[#38BDF8]">
-                      Current Plan
-                    </Badge>
-                  )}
-                  
-                  <CardHeader className="text-center">
-                    <div className={`mx-auto mb-2 ${plan.color}`}>
-                      {plan.icon}
-                    </div>
-                    <CardTitle className="text-white text-xl">{plan.name}</CardTitle>
-                    <div className="text-3xl font-bold text-white">
-                      ${plan.price}
-                      <span className="text-lg font-normal text-slate-400">/month</span>
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent className="space-y-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Projects</span>
-                        <span className="text-white font-semibold">{plan.features.projects}</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Storage</span>
-                        <span className="text-white font-semibold">{plan.features.storage}</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Bandwidth</span>
-                        <span className="text-white font-semibold">{plan.features.bandwidth}</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Terminal Access</span>
-                        <span className="text-white">
-                          {plan.features.terminal ? <Check className="h-4 w-4 text-green-400" /> : '❌'}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Webhooks</span>
-                        <span className="text-white">
-                          {plan.features.webhooks ? <Check className="h-4 w-4 text-green-400" /> : '❌'}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Cron Jobs</span>
-                        <span className="text-white">
-                          {plan.features.cron ? <Check className="h-4 w-4 text-green-400" /> : '❌'}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-400">Analytics</span>
-                        <span className="text-white">
-                          {plan.features.analytics ? <Check className="h-4 w-4 text-green-400" /> : '❌'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {currentPlanKey !== key && plan.price > 0 && (
-                      <div className="space-y-2 pt-4">
-                        <Button
-                          onClick={() => simulateStripePayment(key)}
-                          disabled={upgrading === key}
-                          className="w-full bg-[#6B73FF] hover:bg-[#5A61FF]"
-                        >
-                          {upgrading === key ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : (
-                            <CreditCard className="h-4 w-4 mr-2" />
-                          )}
-                          Pay with Stripe
-                        </Button>
-                        
-                        <Button
-                          onClick={() => simulatePayPalPayment(key)}
-                          disabled={upgrading === key}
-                          className="w-full bg-[#0070BA] hover:bg-[#005A9B]"
-                        >
-                          {upgrading === key ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : (
-                            <DollarSign className="h-4 w-4 mr-2" />
-                          )}
-                          Pay with PayPal
-                        </Button>
-                        
-                        <Button
-                          onClick={() => simulateMpesaPayment(key)}
-                          disabled={upgrading === key}
-                          className="w-full bg-green-600 hover:bg-green-700"
-                        >
-                          {upgrading === key ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : (
-                            <DollarSign className="h-4 w-4 mr-2" />
-                          )}
-                          Pay with M-PESA
-                        </Button>
-                      </div>
-                    )}
-                    
-                    {currentPlanKey === key && (
-                      <Button disabled className="w-full" variant="outline">
-                        Current Plan
-                      </Button>
-                    )}
-                    
-                    {key === 'free' && currentPlanKey !== 'free' && (
-                      <Button
-                        variant="outline"
-                        className="w-full border-slate-600"
-                        onClick={() => {
-                          if (confirm('Are you sure you want to downgrade to the free plan?')) {
-                            handleUpgrade('free', 'stripe');
-                          }
-                        }}
-                      >
-                        Downgrade to Free
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="history">
-            <Card className="bg-[#1E293B] border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white">Billing History</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {billingHistory.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Calendar className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-                    <p className="text-slate-400">No billing history yet</p>
-                    <p className="text-slate-500 text-sm">Your payment history will appear here</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {billingHistory.map((record) => (
-                      <div 
-                        key={record.id} 
-                        className="flex items-center justify-between p-4 bg-slate-800 rounded-lg"
-                      >
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
-                            <Badge className={`${getStatusColor(record.payment_status)} text-white`}>
-                              {record.payment_status}
-                            </Badge>
-                            <span className="text-white font-medium capitalize">
-                              {record.plan} Plan
-                            </span>
-                          </div>
-                          <span className="text-slate-400 text-sm">
-                            via {record.payment_method}
-                          </span>
-                        </div>
-                        
-                        <div className="text-right">
-                          <div className="text-white font-semibold">
-                            ${record.amount} {record.currency}
-                          </div>
-                          <div className="text-slate-400 text-sm">
-                            {new Date(record.created_at).toLocaleDateString()}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+        {/* Pricing Plans */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {plans.map((plan) => {
+            const isCurrent = plan.id === profile?.subscription_tier;
+            const isUpgrade = plans.findIndex(p => p.id === plan.id) > plans.findIndex(p => p.id === profile?.subscription_tier);
+            
+            return (
+              <Card 
+                key={plan.id} 
+                className={`relative bg-slate-800 border-slate-700 ${
+                  plan.popular ? 'border-blue-500 border-2' : ''
+                }`}
+              >
+                {plan.popular && (
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                    <Badge className="bg-blue-600 text-white">Most Popular</Badge>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                
+                <CardHeader className="text-center">
+                  <div className={`w-12 h-12 rounded-lg ${plan.bgColor} mx-auto flex items-center justify-center mb-4`}>
+                    <plan.icon className={`h-6 w-6 ${plan.color}`} />
+                  </div>
+                  <CardTitle className="text-white">{plan.name}</CardTitle>
+                  <div className="text-3xl font-bold text-white">
+                    ${plan.price}
+                    {plan.price > 0 && <span className="text-lg text-slate-400">/{plan.period}</span>}
+                  </div>
+                </CardHeader>
+                
+                <CardContent className="space-y-4">
+                  <ul className="space-y-2">
+                    {plan.features.map((feature, index) => (
+                      <li key={index} className="flex items-center text-slate-300">
+                        <Check className="h-4 w-4 text-green-400 mr-2 flex-shrink-0" />
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                  
+                  <Button
+                    onClick={() => handleUpgrade(plan.id)}
+                    disabled={isCurrent || upgrading === plan.id}
+                    className={`w-full ${
+                      isCurrent 
+                        ? 'bg-slate-600 text-slate-400 cursor-not-allowed' 
+                        : isUpgrade
+                        ? 'bg-blue-600 hover:bg-blue-700'
+                        : 'bg-slate-600 hover:bg-slate-700'
+                    }`}
+                  >
+                    {upgrading === plan.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : isCurrent ? (
+                      'Current Plan'
+                    ) : isUpgrade ? (
+                      'Upgrade'
+                    ) : (
+                      'Downgrade'
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
 
-        {/* Billing Notice */}
-        <Card className="bg-yellow-900/20 border-yellow-600">
-          <CardContent className="flex items-start space-x-3 pt-6">
-            <AlertCircle className="h-5 w-5 text-yellow-400 mt-0.5" />
-            <div>
-              <h4 className="text-yellow-400 font-medium">Test Mode</h4>
-              <p className="text-yellow-200 text-sm">
-                All payments are currently in test mode. No real charges will be made. 
-                In production, replace the mock API keys with real payment processor credentials.
-              </p>
-            </div>
+        {/* Payment History */}
+        <Card className="bg-slate-800 border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center">
+              <DollarSign className="h-5 w-5 mr-2" />
+              Payment History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-sky-400" />
+              </div>
+            ) : payments.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-slate-400">No payment history found</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {payments.map((payment) => (
+                  <div key={payment.id} className="flex items-center justify-between py-3 border-b border-slate-700 last:border-b-0">
+                    <div className="flex items-center space-x-3">
+                      <div className="p-2 bg-slate-700 rounded-lg">
+                        <Calendar className="h-4 w-4 text-slate-400" />
+                      </div>
+                      <div>
+                        <p className="text-white font-medium">{payment.plan_name} Plan</p>
+                        <p className="text-sm text-slate-400">
+                          {new Date(payment.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-white font-medium">
+                        ${payment.amount.toFixed(2)} {payment.currency}
+                      </p>
+                      <Badge 
+                        variant={payment.status === 'completed' ? 'default' : 'secondary'}
+                        className={payment.status === 'completed' ? 'bg-green-600' : ''}
+                      >
+                        {payment.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

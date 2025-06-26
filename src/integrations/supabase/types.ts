@@ -9,6 +9,92 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      billing_history: {
+        Row: {
+          amount: number
+          created_at: string | null
+          currency: string | null
+          id: string
+          payment_method: string
+          payment_status: string | null
+          plan: string
+          processed_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          payment_method: string
+          payment_status?: string | null
+          plan: string
+          processed_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          payment_method?: string
+          payment_status?: string | null
+          plan?: string
+          processed_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bot_configs: {
+        Row: {
+          bot_name: string
+          bot_token: string
+          bot_type: string
+          created_at: string | null
+          id: string
+          last_activity: string | null
+          project_id: string
+          status: string | null
+          updated_at: string | null
+          user_id: string
+          webhook_secret: string | null
+        }
+        Insert: {
+          bot_name: string
+          bot_token: string
+          bot_type: string
+          created_at?: string | null
+          id?: string
+          last_activity?: string | null
+          project_id: string
+          status?: string | null
+          updated_at?: string | null
+          user_id: string
+          webhook_secret?: string | null
+        }
+        Update: {
+          bot_name?: string
+          bot_token?: string
+          bot_type?: string
+          created_at?: string | null
+          id?: string
+          last_activity?: string | null
+          project_id?: string
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string
+          webhook_secret?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_configs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       build_logs: {
         Row: {
           created_at: string
@@ -157,6 +243,51 @@ export type Database = {
           },
         ]
       }
+      payments: {
+        Row: {
+          amount: number
+          billing_period_end: string | null
+          billing_period_start: string | null
+          created_at: string | null
+          currency: string | null
+          id: string
+          metadata: Json | null
+          payment_method: string
+          payment_provider_id: string | null
+          plan_name: string
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          billing_period_end?: string | null
+          billing_period_start?: string | null
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          metadata?: Json | null
+          payment_method: string
+          payment_provider_id?: string | null
+          plan_name: string
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          billing_period_end?: string | null
+          billing_period_start?: string | null
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          metadata?: Json | null
+          payment_method?: string
+          payment_provider_id?: string | null
+          plan_name?: string
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -192,6 +323,50 @@ export type Database = {
           username?: string | null
         }
         Relationships: []
+      }
+      project_files: {
+        Row: {
+          created_at: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          mime_type: string | null
+          project_id: string
+          storage_path: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          project_id: string
+          storage_path: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          mime_type?: string | null
+          project_id?: string
+          storage_path?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_files_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {

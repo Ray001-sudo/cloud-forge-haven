@@ -1,76 +1,132 @@
 
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
+import { useLocation, Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import {
-  Home,
-  Rocket,
+import { 
+  LayoutDashboard, 
+  FolderOpen, 
+  Rocket, 
+  FileText, 
+  BarChart3, 
+  Clock, 
+  Webhook, 
   Bot,
-  Monitor,
+  Terminal as TerminalIcon,
+  Files,
   Settings,
-  CreditCard,
-  FileText,
-  Globe,
-  Clock,
-  Webhook,
-  FolderOpen
+  CreditCard
 } from 'lucide-react';
 
 interface SidebarProps {
-  className?: string;
+  projectId?: string;
 }
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Projects', href: '/dashboard/projects', icon: Rocket },
-  { name: 'Monitoring', href: '/dashboard/monitoring', icon: Monitor },
-  { name: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook },
-  { name: 'Cron Jobs', href: '/dashboard/cron', icon: Clock },
-  { name: 'Deployments', href: '/dashboard/deployments', icon: Globe },
-  { name: 'Bots', href: '/dashboard/bots', icon: Bot },
-  { name: 'File Manager', href: '/dashboard/files', icon: FolderOpen },
-  { name: 'Logs', href: '/dashboard/logs', icon: FileText },
-  { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
-];
-
-const Sidebar: React.FC<SidebarProps> = ({ className }) => {
-  const navigate = useNavigate();
+const Sidebar: React.FC<SidebarProps> = ({ projectId }) => {
   const location = useLocation();
 
-  const isActiveRoute = (href: string) => {
-    if (href === '/dashboard') {
-      return location.pathname === '/dashboard';
-    }
-    return location.pathname.startsWith(href);
-  };
+  const dashboardItems = [
+    {
+      title: 'Dashboard',
+      href: '/dashboard',
+      icon: LayoutDashboard,
+    },
+    {
+      title: 'Projects',
+      href: '/dashboard/projects',
+      icon: FolderOpen,
+    },
+    {
+      title: 'Billing',
+      href: '/dashboard/billing',
+      icon: CreditCard,
+    },
+  ];
+
+  const projectItems = projectId ? [
+    {
+      title: 'Overview',
+      href: `/project/${projectId}`,
+      icon: LayoutDashboard,
+    },
+    {
+      title: 'Deployments',
+      href: `/project/${projectId}/deployments`,
+      icon: Rocket,
+    },
+    {
+      title: 'Files',
+      href: `/project/${projectId}/files`,
+      icon: Files,
+    },
+    {
+      title: 'Terminal',
+      href: `/project/${projectId}/terminal`,
+      icon: TerminalIcon,
+    },
+    {
+      title: 'Logs',
+      href: `/project/${projectId}/logs`,
+      icon: FileText,
+    },
+    {
+      title: 'Monitoring',
+      href: `/project/${projectId}/monitoring`,
+      icon: BarChart3,
+    },
+    {
+      title: 'Cron Jobs',
+      href: `/project/${projectId}/cron-jobs`,
+      icon: Clock,
+    },
+    {
+      title: 'Webhooks',
+      href: `/project/${projectId}/webhooks`,
+      icon: Webhook,
+    },
+    {
+      title: 'Bots',
+      href: `/project/${projectId}/bots`,
+      icon: Bot,
+    },
+    {
+      title: 'Settings',
+      href: `/project/${projectId}/settings`,
+      icon: Settings,
+    },
+  ] : [];
+
+  const items = projectId ? projectItems : dashboardItems;
 
   return (
-    <div className={cn('flex flex-col w-64 bg-slate-800 border-r border-slate-700', className)}>
-      <div className="flex-1 flex flex-col pt-5 pb-4 overflow-y-auto">
-        <nav className="mt-5 flex-1 px-2 space-y-1">
-          {navigation.map((item) => {
-            const isActive = isActiveRoute(item.href);
-            return (
-              <Button
-                key={item.name}
-                variant="ghost"
-                className={cn(
-                  'w-full justify-start text-left font-normal',
-                  isActive
-                    ? 'bg-slate-700 text-white'
-                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                )}
-                onClick={() => navigate(item.href)}
-              >
-                <item.icon className="mr-3 h-5 w-5" />
-                {item.name}
-              </Button>
-            );
-          })}
-        </nav>
+    <div className="w-64 bg-slate-900 border-r border-slate-800 h-screen overflow-y-auto">
+      <div className="p-6">
+        <Link to="/" className="flex items-center space-x-2">
+          <div className="w-8 h-8 bg-sky-600 rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold">CF</span>
+          </div>
+          <span className="text-xl font-bold text-white">CloudForge</span>
+        </Link>
       </div>
+      
+      <nav className="px-6 pb-6">
+        <div className="space-y-1">
+          {items.map((item) => (
+            <Link
+              key={item.href}
+              to={item.href}
+              className={cn(
+                'flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                location.pathname === item.href
+                  ? 'bg-sky-600 text-white'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              )}
+            >
+              <item.icon className="mr-3 h-5 w-5" />
+              {item.title}
+            </Link>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 };
