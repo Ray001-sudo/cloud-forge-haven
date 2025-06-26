@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
@@ -13,12 +12,14 @@ interface TerminalProps {
   projectName: string;
 }
 
+interface FileSystemItem {
+  type: 'file' | 'directory';
+  content?: string;
+  children?: FileSystem;
+}
+
 interface FileSystem {
-  [key: string]: {
-    type: 'file' | 'directory';
-    content?: string;
-    children?: FileSystem;
-  };
+  [key: string]: FileSystemItem;
 }
 
 const Terminal: React.FC<TerminalProps> = ({ projectId, projectName }) => {
@@ -27,9 +28,6 @@ const Terminal: React.FC<TerminalProps> = ({ projectId, projectName }) => {
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentPath, setCurrentPath] = useState('/home/project');
-  const [commandHistory, setCommandHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const [currentCommand, setCurrentCommand] = useState('');
 
   // Mock filesystem for demonstration
   const [filesystem] = useState<FileSystem>({
@@ -152,9 +150,21 @@ const Terminal: React.FC<TerminalProps> = ({ projectId, projectName }) => {
       terminal.write(`\x1b[1;32mcloudforge\x1b[0m:\x1b[1;34m${currentPath}\x1b[0m$ `);
     }
 
-    function clearCurrentLine() {
-      terminal.write('\x1b[2K\r');
-      writePrompt();
+    function getCurrentDirectory(path: string): FileSystemItem | null {
+      const parts = path.split('/').filter(p => p);
+      let current: FileSystem = filesystem;
+      
+      for (const part of parts) {
+        if (current[part] && current[part].type === 'directory' && current[part].children) {
+          current = current[part].children!;
+        } else if (current[part] && current[part].type === 'file') {
+          return current[part];
+        } else {
+          return null;
+        }
+      }
+      
+      return { type: 'directory', children: current };
     }
 
     function executeCommand(command: string) {
@@ -388,31 +398,12 @@ const Terminal: React.FC<TerminalProps> = ({ projectId, projectName }) => {
       writePrompt();
     }
 
-    function getCurrentDirectory(path: string): any {
-      const parts = path.split('/').filter(p => p);
-      let current = filesystem;
-      
-      for (const part of parts) {
-        if (current[part] && current[part].type === 'directory' && current[part].children) {
-          current = current[part].children!;
-        } else if (current[part] && current[part].type === 'file') {
-          return current[part];
-        } else {
-          return null;
-        }
-      }
-      
-      return { type: 'directory', children: current };
-    }
-
     // Handle input
     terminal.onData((data) => {
       const code = data.charCodeAt(0);
 
       if (code === 13) { // Enter
         executeCommand(currentInput);
-        setCommandHistory(prev => [...prev, currentInput]);
-        setHistoryIndex(-1);
         currentInput = '';
         cursorPosition = 0;
       } else if (code === 127) { // Backspace
