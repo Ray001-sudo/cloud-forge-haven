@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -32,19 +33,71 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/dashboard/projects" element={<Projects />} />
-            <Route path="/dashboard/billing" element={<Billing />} />
-            <Route path="/project/:projectId" element={<ProjectDetail />} />
-            <Route path="/project/:projectId/deployments" element={<Deployments />} />
-            <Route path="/project/:projectId/logs" element={<Logs />} />
-            <Route path="/project/:projectId/monitoring" element={<Monitoring />} />
-            <Route path="/project/:projectId/cron-jobs" element={<CronJobs />} />
-            <Route path="/project/:projectId/webhooks" element={<Webhooks />} />
-            <Route path="/project/:projectId/bots" element={<Bots />} />
-            <Route path="/project/:projectId/files" element={<Files />} />
-            <Route path="/project/:projectId/terminal" element={<Terminal />} />
-            <Route path="/project/:projectId/settings" element={<Settings />} />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/projects" element={
+              <ProtectedRoute>
+                <Projects />
+              </ProtectedRoute>
+            } />
+            <Route path="/dashboard/billing" element={
+              <ProtectedRoute>
+                <Billing />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId" element={
+              <ProtectedRoute>
+                <ProjectDetail />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/deployments" element={
+              <ProtectedRoute>
+                <Deployments />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/logs" element={
+              <ProtectedRoute>
+                <Logs />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/monitoring" element={
+              <ProtectedRoute>
+                <Monitoring />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/cron-jobs" element={
+              <ProtectedRoute>
+                <CronJobs />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/webhooks" element={
+              <ProtectedRoute>
+                <Webhooks />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/bots" element={
+              <ProtectedRoute>
+                <Bots />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/files" element={
+              <ProtectedRoute>
+                <Files />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/terminal" element={
+              <ProtectedRoute>
+                <Terminal />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId/settings" element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            } />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
