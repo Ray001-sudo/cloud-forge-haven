@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import TerminalCore from './terminal/TerminalCore';
+import TerminalCore, { type TerminalCoreRef } from './terminal/TerminalCore';
 import TerminalHeader from './terminal/TerminalHeader';
 
 interface TerminalProps {
@@ -11,7 +11,7 @@ interface TerminalProps {
 
 const Terminal: React.FC<TerminalProps> = ({ projectId, projectName }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const terminalRef = useRef<any>(null);
+  const terminalRef = useRef<TerminalCoreRef>(null);
 
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);

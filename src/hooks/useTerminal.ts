@@ -19,6 +19,13 @@ export interface BuildLog {
   created_at: string;
 }
 
+interface CommandExecutionResult {
+  id: string;
+  output: string;
+  exit_code: number;
+  timestamp: string;
+}
+
 export const useTerminal = (projectId: string) => {
   const { user } = useAuth();
   const [commandHistory, setCommandHistory] = useState<TerminalCommand[]>([]);
@@ -81,14 +88,17 @@ export const useTerminal = (projectId: string) => {
 
       if (error) throw error;
 
+      // Type assertion for the RPC response
+      const result = data as CommandExecutionResult;
+
       return {
-        output: data.output || '',
-        exit_code: data.exit_code || 0
+        output: result.output || '',
+        exit_code: result.exit_code || 0
       };
     } catch (error) {
       console.error('Error executing command:', error);
       return {
-        output: `Error: ${error.message}`,
+        output: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         exit_code: 1
       };
     }

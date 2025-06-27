@@ -1,5 +1,5 @@
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
@@ -12,12 +12,35 @@ interface TerminalCoreProps {
   onClear?: () => void;
 }
 
-const TerminalCore: React.FC<TerminalCoreProps> = ({ projectId, projectName, onClear }) => {
+export interface TerminalCoreRef {
+  clearTerminal: () => void;
+  fitTerminal: () => void;
+}
+
+const TerminalCore = forwardRef<TerminalCoreRef, TerminalCoreProps>(({ projectId, projectName, onClear }, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [currentPath, setCurrentPath] = useState('/home/project');
   const { executeCommand, buildLogs, commandHistory } = useTerminal(projectId);
+
+  const clearTerminal = () => {
+    if (xtermRef.current) {
+      xtermRef.current.clear();
+      onClear?.();
+    }
+  };
+
+  const fitTerminal = () => {
+    if (fitAddonRef.current) {
+      fitAddonRef.current.fit();
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    clearTerminal,
+    fitTerminal
+  }));
 
   useEffect(() => {
     if (!terminalRef.current) return;
@@ -126,7 +149,7 @@ const TerminalCore: React.FC<TerminalCoreProps> = ({ projectId, projectName, onC
           terminal.writeln(`\x1b[31mCommand exited with code ${result.exit_code}\x1b[0m`);
         }
       } catch (error) {
-        terminal.writeln(`\x1b[31mError: ${error.message}\x1b[0m`);
+        terminal.writeln(`\x1b[31mError: ${error instanceof Error ? error.message : 'Unknown error'}\x1b[0m`);
       }
 
       terminal.writeln('');
@@ -231,28 +254,6 @@ const TerminalCore: React.FC<TerminalCoreProps> = ({ projectId, projectName, onC
     terminal.writeln(`${colorCode}[${timestamp}] ${latestLog.log_level.toUpperCase()}: ${latestLog.message}${resetCode}`);
   }, [buildLogs]);
 
-  const clearTerminal = () => {
-    if (xtermRef.current) {
-      xtermRef.current.clear();
-      onClear?.();
-    }
-  };
-
-  const fitTerminal = () => {
-    if (fitAddonRef.current) {
-      fitAddonRef.current.fit();
-    }
-  };
-
-  // Expose methods for parent component
-  useEffect(() => {
-    const terminal = xtermRef.current;
-    if (terminal) {
-      (terminal as any).clearTerminal = clearTerminal;
-      (terminal as any).fitTerminal = fitTerminal;
-    }
-  }, []);
-
   return (
     <div 
       ref={terminalRef} 
@@ -260,6 +261,8 @@ const TerminalCore: React.FC<TerminalCoreProps> = ({ projectId, projectName, onC
       style={{ minHeight: '400px' }}
     />
   );
-};
+});
+
+TerminalCore.displayName = 'TerminalCore';
 
 export default TerminalCore;
