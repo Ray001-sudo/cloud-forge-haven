@@ -88,8 +88,8 @@ export const useTerminal = (projectId: string) => {
 
       if (error) throw error;
 
-      // Type assertion for the RPC response
-      const result = data as CommandExecutionResult;
+      // Fix TypeScript error with proper type assertion
+      const result = data as unknown as CommandExecutionResult;
 
       return {
         output: result.output || '',
@@ -101,6 +101,25 @@ export const useTerminal = (projectId: string) => {
         output: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         exit_code: 1
       };
+    }
+  }, [user, projectId]);
+
+  // Clear command history
+  const clearCommandHistory = useCallback(async () => {
+    if (!user || !projectId) return;
+
+    try {
+      const { error } = await supabase
+        .from('terminal_commands')
+        .delete()
+        .eq('project_id', projectId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      
+      setCommandHistory([]);
+    } catch (error) {
+      console.error('Error clearing command history:', error);
     }
   }, [user, projectId]);
 
@@ -154,6 +173,7 @@ export const useTerminal = (projectId: string) => {
     loading,
     executeCommand,
     loadCommandHistory,
-    loadBuildLogs
+    loadBuildLogs,
+    clearCommandHistory
   };
 };
