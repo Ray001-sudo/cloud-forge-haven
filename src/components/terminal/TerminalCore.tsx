@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { Terminal as XTerm } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
@@ -93,7 +92,6 @@ const TerminalCore = forwardRef<TerminalCoreRef, TerminalCoreProps>(({ projectId
         foreground: '#c0caf5',
         cursor: '#ff9e64',
         cursorAccent: '#1a1b26',
-        selection: '#33467c',
         black: '#15161e',
         red: '#f7768e',
         green: '#9ece6a',
